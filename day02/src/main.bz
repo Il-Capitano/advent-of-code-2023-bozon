@@ -1,0 +1,97 @@
+import std::format;
+import std::vector;
+import std::math;
+import common;
+
+struct cube_counts_t
+{
+	.red: int32;
+	.green: int32;
+	.blue: int32;
+}
+
+struct game_info_t
+{
+	.id: int32;
+	.draws: std::vector<cube_counts_t>;
+}
+
+function parse_input(input: str) -> std::vector<game_info_t>
+{
+	mut result = std::vector<game_info_t>();
+
+	for (let line in input.by_line())
+	{
+		let [game_id, draws] = line.split(": ");
+		let [_, game_id] = game_id.split(' ');
+		let game_id = parse_int(int32, game_id);
+
+		let &mut info = result.emplace_back(game_info_t[ game_id, std::vector<cube_counts_t>() ]);
+		for (let draw_info in draws.split_by("; "))
+		{
+			let &mut counts = info.draws.emplace_back();
+			for (let count in draw_info.split_by(", "))
+			{
+				let [count, color] = count.split(' ');
+				let count = parse_int(int32, count);
+				switch (color)
+				{
+					"red" => counts.red += count,
+					"green" => counts.green += count,
+					"blue" => counts.blue += count,
+					else => unreachable,
+				}
+			}
+		}
+	}
+
+	return move result;
+}
+
+function get_max_counts(draws: [: cube_counts_t]) -> cube_counts_t
+{
+	mut result = cube_counts_t();
+	for (let draw in draws)
+	{
+		result.red = std::max(result.red, draw.red);
+		result.green = std::max(result.green, draw.green);
+		result.blue = std::max(result.blue, draw.blue);
+	}
+	return result;
+}
+
+function part1(input: [: game_info_t]) -> int32
+{
+	mut id_sum = 0;
+	for (let &info in input)
+	{
+		let max_counts = get_max_counts(info.draws.as_slice());
+		if (max_counts.red <= 12 && max_counts.green <= 13 && max_counts.blue <= 14)
+		{
+			id_sum += info.id;
+		}
+	}
+	return id_sum;
+}
+
+function part2(input: [: game_info_t]) -> int32
+{
+	mut power_sum = 0;
+	for (let &info in input)
+	{
+		let max_counts = get_max_counts(info.draws.as_slice());
+		power_sum += max_counts.red * max_counts.green * max_counts.blue;
+	}
+	return power_sum;
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+	let input = parse_input(input.as_str());
+
+	let part1_result = part1(input.as_slice());
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input.as_slice());
+	std::print("part 2: {}\n", part2_result);
+}
