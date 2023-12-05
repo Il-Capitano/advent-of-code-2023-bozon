@@ -1,0 +1,188 @@
+import std::format;
+import std::vector;
+import std::utils;
+import std::math;
+import common;
+
+struct single_mapping_t
+{
+	.destination_start: usize;
+	.source_start: usize;
+	.range_size: usize;
+}
+
+struct map_t
+{
+	.mappings: std::vector<single_mapping_t>;
+}
+
+struct almanac_info_t
+{
+	.seeds: std::vector<usize>;
+	.maps: std::vector<map_t>;
+}
+
+function parse_input(input: str) -> almanac_info_t
+{
+	let lines_range = input.by_line();
+	mut it = lines_range.begin();
+	let end = lines_range.end();
+
+	mut result = almanac_info_t();
+
+	// seeds
+	std::assert(it != end);
+	let seeds_line = *it;
+	let [_, seeds] = seeds_line.split(": ");
+	for (let seed in seeds.split_by(' '))
+	{
+		result.seeds.push_back(parse_int(usize, seed));
+	}
+	++it;
+	std::assert(it != end);
+	++it; // empty line
+
+	while (it != end)
+	{
+		++it; // 'seed-to-soil map:', etc.
+		let &mut map = result.maps.emplace_back();
+		for (; it != end; ++it)
+		{
+			let line = *it;
+			if (line == "")
+			{
+				++it;
+				break;
+			}
+			let [destination_start, line] = line.split(' ');
+			let [source_start, range_size] = line.split(' ');
+
+			map.mappings.push_back(single_mapping_t[
+				parse_int(usize, destination_start),
+				parse_int(usize, source_start),
+				parse_int(usize, range_size),
+			]);
+		}
+	}
+
+	return move result;
+}
+
+function do_mapping(source: usize, map: &map_t) -> usize
+{
+	for (let &mapping in map.mappings)
+	{
+		if (source >= mapping.source_start && source < mapping.source_start + mapping.range_size)
+		{
+			return mapping.destination_start + (source - mapping.source_start);
+		}
+	}
+	return source;
+}
+
+function part1(input: &almanac_info_t) -> usize
+{
+	mut numbers = input.seeds;
+	for (let &map in input.maps)
+	{
+		for (let &mut number in numbers)
+		{
+			number = do_mapping(number, map);
+		}
+	}
+
+	mut min_location = numbers[0];
+	for (let number in numbers)
+	{
+		min_location = std::min(min_location, number);
+	}
+	return min_location;
+}
+
+struct range_t
+{
+	.start: usize;
+	.size: usize;
+}
+
+function do_mapping(ranges: &mut std::vector<range_t>, source_range: mut range_t, map: &map_t)
+{
+	while (source_range.size != 0)
+	{
+		mut next_mapping: ?single_mapping_t = null;
+		for (let &mapping in map.mappings)
+		{
+			if (
+				(next_mapping == null || mapping.source_start < next_mapping.get_value().source_start)
+				&& (
+					mapping.source_start < source_range.start + source_range.size
+					&& mapping.source_start + mapping.range_size > source_range.start
+				)
+			)
+			{
+				next_mapping = mapping;
+			}
+		}
+		if (next_mapping == null)
+		{
+			ranges.push_back(source_range);
+			source_range.size = 0;
+		}
+		else
+		{
+			let &next_mapping = next_mapping.get_value();
+			if (next_mapping.source_start > source_range.start)
+			{
+				let size = next_mapping.source_start - source_range.start;
+				ranges.push_back(range_t[ source_range.start, size ]);
+				source_range.start += size;
+				source_range.size -= size;
+			}
+
+			let overlap_size = std::min(source_range.size, next_mapping.source_start + next_mapping.range_size - source_range.start);
+			let destination_start = next_mapping.destination_start + (source_range.start - next_mapping.source_start);
+			ranges.push_back(range_t[ destination_start, overlap_size ]);
+			source_range.start += overlap_size;
+			source_range.size -= overlap_size;
+		}
+	}
+}
+
+function part2(input: &almanac_info_t) -> usize
+{
+	mut ranges = std::vector<range_t>();
+	ranges.reserve(input.seeds.size() / 2);
+	for (mut i = 0uz; i < input.seeds.size(); i += 2)
+	{
+		ranges.push_back(range_t[ input.seeds[i], input.seeds[i + 1] ]);
+	}
+
+	for (let &map in input.maps)
+	{
+		mut new_ranges = std::vector<range_t>();
+		for (let &range in ranges)
+		{
+			do_mapping(new_ranges, range, map);
+		}
+		ranges = move new_ranges;
+	}
+
+	std::assert(ranges.size() > 0);
+	mut min_location = ranges[0].start;
+	for (let &range in ranges)
+	{
+		min_location = std::min(min_location, range.start);
+	}
+	return min_location;
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+	let input = parse_input(input.as_str());
+
+	let part1_result = part1(input);
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input);
+	std::print("part 2: {}\n", part2_result);
+}
