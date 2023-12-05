@@ -1,0 +1,111 @@
+import std::format;
+import std::vector;
+import std::math;
+import common;
+
+struct card_info_t
+{
+	.winning_numbers: std::vector<int32>;
+	.drawn_numbers: std::vector<int32>;
+}
+
+function parse_input(input: str) -> std::vector<card_info_t>
+{
+	mut result = std::vector<card_info_t>();
+	for (let line in input.by_line())
+	{
+		let &mut info = result.emplace_back();
+		let [_, numbers] = line.split(": ");
+
+		let [winning_numbers, drawn_numbers] = numbers.split(" | ");
+
+		for (let winning_number in winning_numbers.split_by(' '))
+		{
+			if (winning_number == "")
+			{
+				continue;
+			}
+
+			info.winning_numbers.push_back(parse_int(int32, winning_number));
+		}
+
+		for (let drawn_number in drawn_numbers.split_by(' '))
+		{
+			if (drawn_number == "")
+			{
+				continue;
+			}
+
+			info.drawn_numbers.push_back(parse_int(int32, drawn_number));
+		}
+	}
+	return move result;
+}
+
+function get_match_count(info: &card_info_t) -> usize
+{
+	mut match_count = 0uz;
+	for (let winning_number in info.winning_numbers.as_slice())
+	{
+		for (let drawn_number in info.drawn_numbers.as_slice())
+		{
+			if (drawn_number == winning_number)
+			{
+				match_count += 1;
+				break;
+			}
+		}
+	}
+	return match_count;
+}
+
+function part1(infos: [: card_info_t]) -> usize
+{
+	mut points = 0uz;
+	for (let &info in infos)
+	{
+		let match_count = get_match_count(info);
+		if (match_count != 0)
+		{
+			points += 1u << (match_count - 1);
+		}
+	}
+	return points;
+}
+
+function part2(infos: [: card_info_t]) -> usize
+{
+	mut card_counts = std::vector<usize>();
+	card_counts.resize(infos.size());
+	for (let &mut count in card_counts)
+	{
+		count = 1;
+	}
+
+	for (let i in 0..card_counts.size())
+	{
+		let match_count = get_match_count(infos[i]);
+		for (let j in i + 1..std::min(i + match_count + 1, card_counts.size()))
+		{
+			card_counts[j] += card_counts[i];
+		}
+	}
+
+	mut sum = 0uz;
+	for (let count in card_counts.as_slice())
+	{
+		sum += count;
+	}
+	return sum;
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+	let input = parse_input(input.as_str());
+
+	let part1_result = part1(input.as_slice());
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input.as_slice());
+	std::print("part 2: {}\n", part2_result);
+}
