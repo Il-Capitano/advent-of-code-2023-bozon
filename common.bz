@@ -218,6 +218,27 @@ export function split(s: str, split_char: char) -> [ str, str ]
 	};
 }
 
+function is_whitespace(c: uint8) -> bool
+{
+	let c = c as char;
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+export function trim(s: str) -> str
+{
+	mut begin = s.begin_ptr();
+	mut end = s.end_ptr();
+	while (begin != end && is_whitespace(*begin))
+	{
+		++begin;
+	}
+	while (end != begin && is_whitespace(*(end - 1)))
+	{
+		--end;
+	}
+	return __builtin_str_from_ptrs(begin, end);
+}
+
 function is_signed_integer(T: typename) -> bool
 {
 	return T == int8 || T == int16 || T == int32 || T == int64;
@@ -570,9 +591,9 @@ export operator ++ (it: &mut sliding_window_iterator_t) -> typeof it
 export operator * (it: #sliding_window_iterator_t) -> [: (typeof it)._value_type]
 {
 	type T = (typeof it)._value_type;
-	if consteval (std::meta::is_const(T))
+	if consteval (std::meta::is_mut(T))
 	{
-		return __builtin_slice_from_const_ptrs(it._window_begin, it._window_end);
+		return __builtin_slice_from_mut_ptrs(it._window_begin, it._window_end);
 	}
 	else
 	{
@@ -596,6 +617,11 @@ export function sliding_window(slice: [: auto], n: usize) -> sliding_window_iter
 		slice.begin() + std::min(n, slice.size()),
 		slice.end(),
 	];
+}
+
+export function bytes(s: str) -> [: uint8]
+{
+	return __builtin_slice_from_ptrs(s.begin_ptr(), s.end_ptr());
 }
 
 export function read_file(filename: str) -> std::string
