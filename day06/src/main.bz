@@ -1,0 +1,116 @@
+import std::format;
+import std::vector;
+import std::string;
+import common;
+
+struct race_info_t
+{
+	.time: std::vector<int64>;
+	.distance: std::vector<int64>;
+}
+
+function parse_input(input: str) -> race_info_t
+{
+	let [times, distances] = input.split('\n');
+	let [_, times] = times.split(':');
+	let times = times.trim();
+	let [_, distances] = distances.split(':');
+	let distances = distances.trim();
+
+	mut result = race_info_t();
+
+	for (let time in times.split_by(' '))
+	{
+		if (time == "")
+		{
+			continue;
+		}
+
+		result.time.push_back(parse_int(int64, time));
+	}
+
+	for (let distance in distances.split_by(' '))
+	{
+		if (distance == "")
+		{
+			continue;
+		}
+
+		result.distance.push_back(parse_int(int64, distance));
+	}
+
+	return move result;
+}
+
+function get_distance(time: int64, time_held: int64) -> int64
+{
+	return time_held * (time - time_held);
+}
+
+function get_better_count(total_time: int64, total_distance: int64) -> int64
+{
+	let min_hold_time = {
+		mut min_hold_time = 1i64;
+		while (get_distance(total_time, min_hold_time) <= total_distance)
+		{
+			min_hold_time += 1;
+		}
+		min_hold_time
+	};
+	let max_hold_time = {
+		mut max_hold_time = total_time - 1;
+		while (get_distance(total_time, max_hold_time) <= total_distance)
+		{
+			max_hold_time -= 1;
+		}
+		max_hold_time
+	};
+
+	std::print("{}, {}\n", min_hold_time, max_hold_time);
+
+	return max_hold_time - min_hold_time + 1;
+}
+
+function part1(input: &race_info_t) -> int64
+{
+	let race_count = input.time.size();
+	mut result = 1i64;
+	for (let i in 0..race_count)
+	{
+		result *= get_better_count(input.time[i], input.distance[i]);
+	}
+	return result;
+}
+
+function part2(input: &race_info_t) -> int64
+{
+	let total_time = {
+		mut combined_number = std::string();
+		for (let time in input.time)
+		{
+			combined_number += std::format("{}", time);
+		}
+		parse_int(int64, combined_number.as_str())
+	};
+	let total_distance = {
+		mut combined_number = std::string();
+		for (let distance in input.distance)
+		{
+			combined_number += std::format("{}", distance);
+		}
+		parse_int(int64, combined_number.as_str())
+	};
+
+	return get_better_count(total_time, total_distance);
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+	let input = parse_input(input.as_str());
+
+	let part1_result = part1(input);
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input);
+	std::print("part 2: {}\n", part2_result);
+}
