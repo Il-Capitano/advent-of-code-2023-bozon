@@ -1,0 +1,156 @@
+import std::format;
+import std::vector;
+import std::utils;
+import common;
+
+consteval id_base = ('Z' - 'A' + 1) as usize;
+
+function node_name_to_id(name: str) -> usize
+{
+	std::assert(name.size() == 3);
+
+	mut id = 0uz;
+	for (let c in name.bytes())
+	{
+		let c = c as char;
+		std::assert(c >= 'A' && c <= 'Z');
+		id *= id_base;
+		id += (c - 'A') as usize;
+	}
+	return id;
+}
+
+struct map_t
+{
+	.directions: std::vector<uint8>; // 0 for left, 1 for right
+	.node_ids: std::vector<usize>;
+	.node_neighbors: std::vector<[2: usize]>;
+}
+
+function parse_input(input: str) -> map_t
+{
+	let [directions, nodes] = input.split("\n\n");
+
+	mut result = map_t();
+	for (let c in directions.chars())
+	{
+		result.directions.push_back(if (c == 'L') { 0 } else { 1 });
+	}
+
+	result.node_neighbors.resize(id_base * id_base * id_base);
+	for (let line in nodes.by_line())
+	{
+		let [name, adjacent_nodes] = line.split(" = ");
+		let [_, adjacent_nodes] = adjacent_nodes.split('(');
+		let [adjacent_nodes, _] = adjacent_nodes.split(')');
+		let [left_node, right_node] = adjacent_nodes.split(", ");
+
+		let id = node_name_to_id(name);
+		result.node_ids.push_back(id);
+		let &mut node = result.node_neighbors[id];
+		node[0] = node_name_to_id(left_node);
+		node[1] = node_name_to_id(right_node);
+	}
+
+	return move result;
+}
+
+function part1(map: &map_t) -> usize
+{
+	mut current_node = consteval node_name_to_id("AAA");
+	let end_node = consteval node_name_to_id("ZZZ");
+
+	mut step_count = 0uz;
+	while (current_node != end_node)
+	{
+		let direction = map.directions[step_count % map.directions.size()];
+		current_node = map.node_neighbors[current_node, direction];
+		step_count += 1;
+	}
+
+	return step_count;
+}
+
+struct period_info_t
+{
+	.period: usize;
+	.offset: usize;
+}
+
+function get_period_info(map: &map_t, start_node: usize) -> period_info_t
+{
+	mut end_node: ?usize = null;
+
+	mut node = start_node;
+	mut offset = 0uz;
+	mut step_count = 0uz;
+	while (true)
+	{
+		let direction = map.directions[step_count % map.directions.size()];
+		node = map.node_neighbors[node, direction];
+		step_count += 1;
+
+		static_assert(node_name_to_id("XXZ") % id_base == id_base - 1);
+		if (node % id_base == id_base - 1)
+		{
+			if (end_node == null)
+			{
+				end_node = node;
+				offset = step_count;
+			}
+			else
+			{
+				std::assert(end_node.get_value() == node);
+				break;
+			}
+		}
+	}
+
+	let period = step_count - offset;
+	std::assert(period == offset);
+	return period_info_t[ step_count - offset, offset ];
+}
+
+function gcd(a: mut usize, b: mut usize) -> usize
+{
+	while (b != 0)
+	{
+		let t = b;
+		b = a % b;
+		a = t;
+	}
+	return a;
+}
+
+function part2(map: &map_t) -> usize
+{
+	mut period_infos = std::vector<period_info_t>();
+
+	for (let node in map.node_ids)
+	{
+		static_assert(node_name_to_id("XXA") % id_base == 0);
+		if (node % id_base == 0)
+		{
+			period_infos.push_back(get_period_info(map, node));
+		}
+	}
+
+	mut result = 1uz;
+	for (let &info in period_infos)
+	{
+		result *= info.period / gcd(result, info.period);
+	}
+
+	return result;
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+	let input = parse_input(input.as_str());
+
+	let part1_result = part1(input);
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input);
+	std::print("part 2: {}\n", part2_result);
+}
