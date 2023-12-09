@@ -1,0 +1,102 @@
+import std::format;
+import std::vector;
+import common;
+
+function parse_input(input: str) -> std::vector<std::vector<int64> >
+{
+	mut result = std::vector<std::vector<int64> >();
+	for (let line in input.by_line())
+	{
+		let &mut values = result.emplace_back();
+		for (let value in line.split_by(' '))
+		{
+			values.push_back(parse_int(int64, value));
+		}
+	}
+
+	return move result;
+}
+
+function get_next_value(values: [: int64]) -> int64
+{
+	mut values = std::vector<int64>(values);
+
+	mut is_all_zero = false;
+	mut size = values.size();
+	while (size != 0 && !is_all_zero)
+	{
+		is_all_zero = true;
+		for (let i in 0..size - 1)
+		{
+			values[i] = values[i + 1] - values[i];
+			is_all_zero &= values[i] == 0;
+		}
+		size -= 1;
+	}
+
+	mut next_value = 0i64;
+	for (let i in size..values.size())
+	{
+		next_value += values[i];
+	}
+	return next_value;
+}
+
+function part1(input: &std::vector<std::vector<int64> >) -> int64
+{
+	mut value_sum = 0i64;
+	for (let &values in input)
+	{
+		value_sum += get_next_value(values.as_slice());
+	}
+	return value_sum;
+}
+
+function get_previous_value(values: [: int64]) -> int64
+{
+	mut values = std::vector<int64>(values);
+
+	mut is_all_zero = false;
+	mut start = 0uz;
+	let size = values.size();
+	while (start != size && !is_all_zero)
+	{
+		is_all_zero = true;
+		for (mut i = size - 1; i > start; --i)
+		{
+			values[i] = values[i] - values[i - 1];
+			is_all_zero &= values[i] == 0;
+		}
+		start += 1;
+	}
+
+	mut previous_value = 0i64;
+	mut x = 1i64;
+	for (let i in 0..start)
+	{
+		previous_value += x * values[i];
+		x *= -1;
+	}
+	return previous_value;
+}
+
+function part2(input: &std::vector<std::vector<int64> >) -> int64
+{
+	mut value_sum = 0i64;
+	for (let &values in input)
+	{
+		value_sum += get_previous_value(values.as_slice());
+	}
+	return value_sum;
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+	let input = parse_input(input.as_str());
+
+	let part1_result = part1(input);
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input);
+	std::print("part 2: {}\n", part2_result);
+}
