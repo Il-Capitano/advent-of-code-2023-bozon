@@ -1,0 +1,302 @@
+import std::format;
+import std::vector;
+import common;
+
+enum direction
+{
+	north,
+	west,
+	south,
+	east,
+}
+
+enum pipe_bend_kind
+{
+	none,
+	start,
+	north_west,
+	north_south,
+	north_east,
+	west_south,
+	west_east,
+	south_east,
+}
+
+type map_t = std::vector<std::vector<pipe_bend_kind> >;
+
+function parse_input(input: str) -> map_t
+{
+	mut result = map_t();
+	for (let line in input.by_line())
+	{
+		let &mut pipe_line = result.emplace_back();
+		for (let c in line.chars())
+		{
+			pipe_line.push_back(switch (c) {
+				'.' => .none,
+				'|' => .north_south,
+				'-' => .west_east,
+				'L' => .north_east,
+				'J' => .north_west,
+				'7' => .west_south,
+				'F' => .south_east,
+				'S' => .start,
+				else => unreachable,
+			});
+		}
+	}
+	return move result;
+}
+
+function get_bend_directions(bend: pipe_bend_kind) -> [2: direction]
+{
+	return switch (bend) {
+		.none, .start => unreachable,
+		.north_west => [ .north, .west ],
+		.north_south => [ .north, .south ],
+		.north_east => [ .north, .east ],
+		.west_south => [ .west, .south ],
+		.west_east => [ .west, .east ],
+		.south_east => [ .south, .east ],
+	};
+}
+
+function opposite_direction(dir: direction) -> direction
+{
+	return switch (dir) {
+		.north => .south,
+		.west => .east,
+		.south => .north,
+		.east => .west,
+	};
+}
+
+function loop_size(map: &map_t, start_i: usize, start_j: usize, start_dir: direction) -> usize
+{
+	mut i = start_i;
+	mut j = start_j;
+	mut dir = start_dir;
+
+	{
+		switch (dir)
+		{
+			.north => i -= 1,
+			.west => j -= 1,
+			.south => i += 1,
+			.east => j += 1,
+		}
+		let dirs = get_bend_directions(map[i, j]);
+		dir = if (dir.opposite_direction() != dirs[0]) { dirs[0] } else { dirs[1] };
+	}
+
+	mut size = 1uz;
+
+	while (i != start_i || j != start_j)
+	{
+		switch (dir)
+		{
+			.north => i -= 1,
+			.west => j -= 1,
+			.south => i += 1,
+			.east => j += 1,
+		}
+
+		let dirs = get_bend_directions(map[i, j]);
+		dir = if (dir.opposite_direction() != dirs[0]) { dirs[0] } else { dirs[1] };
+		size += 1;
+	}
+
+	return size;
+}
+
+function get_start_position(map: &map_t) -> [2: usize]
+{
+	let height = map.size();
+	let width = map[0].size();
+	for (let i in 0..height)
+	{
+		for (let j in 0..width)
+		{
+			if (map[i, j] == .start)
+			{
+				return [ i, j ];
+			}
+		}
+	}
+	unreachable;
+}
+
+function get_start_bend_kind(map: &map_t, start_i: usize, start_j: usize) -> pipe_bend_kind
+{
+	let north_connected = start_i != 0 && {
+		let dirs = get_bend_directions(map[start_i - 1, start_j]);
+		dirs[0] == .south || dirs[1] == .south
+	};
+
+	let west_connected = start_j != 0 && {
+		let dirs = get_bend_directions(map[start_i, start_j - 1]);
+		dirs[0] == .east || dirs[1] == .east
+	};
+
+	let height = map.size();
+	let south_connected = start_i != height - 1 && {
+		let dirs = get_bend_directions(map[start_i + 1, start_j]);
+		dirs[0] == .north || dirs[1] == .north
+	};
+
+	let width = map[0].size();
+	let east_connected = start_j != width - 1 && {
+		let dirs = get_bend_directions(map[start_i, start_j + 1]);
+		dirs[0] == .west || dirs[1] == .west
+	};
+
+	if (north_connected && west_connected)
+	{
+		return .north_west;
+	}
+	else if (north_connected && south_connected)
+	{
+		return .north_south;
+	}
+	else if (north_connected && east_connected)
+	{
+		return .north_east;
+	}
+	else if (west_connected && south_connected)
+	{
+		return .west_south;
+	}
+	else if (west_connected && east_connected)
+	{
+		return .west_east;
+	}
+	else if (south_connected && east_connected)
+	{
+		return .south_east;
+	}
+
+	return .none;
+}
+
+function part1(map: &map_t) -> usize
+{
+	let [start_i, start_j] = get_start_position(map);
+	let start_bend = get_start_bend_kind(map, start_i, start_j);
+	mut map = map;
+	map[start_i, start_j] = start_bend;
+
+	let loop_size = loop_size(map, start_i, start_j, get_bend_directions(start_bend)[0]);
+
+	return loop_size / 2;
+}
+
+function get_map_with_only_loop(map: &map_t, start_i: usize, start_j: usize, start_dir: direction) -> map_t
+{
+	mut result_map = map;
+	for (let &mut line in result_map)
+	{
+		for (let &mut tile in line)
+		{
+			tile = .none;
+		}
+	}
+
+	mut i = start_i;
+	mut j = start_j;
+	mut dir = start_dir;
+	result_map[i, j] = map[i, j];
+
+	{
+		switch (dir)
+		{
+			.north => i -= 1,
+			.west => j -= 1,
+			.south => i += 1,
+			.east => j += 1,
+		}
+		let dirs = get_bend_directions(map[i, j]);
+		dir = if (dir.opposite_direction() != dirs[0]) { dirs[0] } else { dirs[1] };
+	}
+
+	while (i != start_i || j != start_j)
+	{
+		result_map[i, j] = map[i, j];
+		switch (dir)
+		{
+			.north => i -= 1,
+			.west => j -= 1,
+			.south => i += 1,
+			.east => j += 1,
+		}
+
+		let dirs = get_bend_directions(map[i, j]);
+		dir = if (dir.opposite_direction() != dirs[0]) { dirs[0] } else { dirs[1] };
+	}
+
+	return move result_map;
+}
+
+function print_map(map: &map_t)
+{
+	for (let &line in map)
+	{
+		for (let bend in line)
+		{
+			let c = switch (bend) {
+				.none => ' ',
+				.start => 'S',
+				.north_west => '┘',
+				.north_south => '│',
+				.north_east => '└',
+				.west_south => '┐',
+				.west_east => '─',
+				.south_east => '┌',
+			};
+			std::print("{}", c);
+		}
+		std::print("\n");
+	}
+}
+
+function part2(map: &map_t) -> usize
+{
+	let [start_i, start_j] = get_start_position(map);
+	let start_bend = get_start_bend_kind(map, start_i, start_j);
+	mut map = map;
+	map[start_i, start_j] = start_bend;
+	let map = get_map_with_only_loop(map, start_i, start_j, get_bend_directions(start_bend)[0]);
+
+	mut enclosed_count = 0uz;
+	for (let &line in map)
+	{
+		mut is_inside = false;
+		for (let bend in line)
+		{
+			if (bend != .none && {
+				let dirs = get_bend_directions(bend);
+				dirs[0] == .north || dirs[1] == .north
+			})
+			{
+				is_inside = !is_inside;
+			}
+
+			if (bend == .none && is_inside)
+			{
+				enclosed_count += 1;
+			}
+		}
+	}
+
+	return enclosed_count;
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+	let input = parse_input(input.as_str());
+
+	let part1_result = part1(input);
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input);
+	std::print("part 2: {}\n", part2_result);
+}
