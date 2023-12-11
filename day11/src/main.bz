@@ -1,0 +1,178 @@
+import std::format;
+import std::vector;
+import std::math;
+import common;
+
+type map_t = std::vector<std::vector<bool> >;
+
+struct map_info_t
+{
+	.galaxies: std::vector<[isize, isize]>;
+	.rows_is_empty: std::vector<bool>;
+	.cols_is_empty: std::vector<bool>;
+}
+
+function parse_input(input: str) -> std::vector<[isize, isize]>
+{
+	mut result = std::vector<[isize, isize]>();
+
+	mut i = 0iz;
+	for (let line in input.by_line())
+	{
+		mut j = 0iz;
+		for (let c in line.chars())
+		{
+			if (c == '#')
+			{
+				result.push_back([ i, j ]);
+			}
+			j += 1;
+		}
+		i += 1;
+	}
+
+	return move result;
+}
+
+function part1(galaxies: [: [isize, isize]]) -> isize
+{
+	mut distance_sum = 0iz;
+
+	let height = {
+		mut result = 0iz;
+		for (let &[i, _] in galaxies)
+		{
+			result = std::max(result, i + 1);
+		}
+		result
+	};
+
+	let width = {
+		mut result = 0iz;
+		for (let &[_, j] in galaxies)
+		{
+			result = std::max(result, j + 1);
+		}
+		result
+	};
+
+	mut row_positions = std::vector<isize>();
+	row_positions.resize(height as usize);
+	for (let i in 0..height)
+	{
+		row_positions[i] = 2;
+	}
+
+	mut col_positions = std::vector<isize>();
+	col_positions.resize(width as usize);
+	for (let j in 0..width)
+	{
+		col_positions[j] = 2;
+	}
+
+	for (let &[i, j] in galaxies)
+	{
+		row_positions[i] = 1;
+		col_positions[j] = 1;
+	}
+
+	for (let i in 1..height)
+	{
+		row_positions[i] += row_positions[i - 1];
+	}
+
+	for (let j in 1..width)
+	{
+		col_positions[j] += col_positions[j - 1];
+	}
+
+	for (let i in 0..galaxies.size())
+	{
+		for (let j in i + 1..galaxies.size())
+		{
+			let &[ai, aj] = galaxies[i];
+			let &[bi, bj] = galaxies[j];
+			mut distance = std::abs(row_positions[ai] - row_positions[bi]) + std::abs(col_positions[aj] - col_positions[bj]);
+			distance_sum += distance;
+		}
+	}
+
+	return distance_sum;
+}
+
+function part2(galaxies: [: [isize, isize]]) -> isize
+{
+	mut distance_sum = 0iz;
+
+	let height = {
+		mut result = 0iz;
+		for (let &[i, _] in galaxies)
+		{
+			result = std::max(result, i + 1);
+		}
+		result
+	};
+
+	let width = {
+		mut result = 0iz;
+		for (let &[_, j] in galaxies)
+		{
+			result = std::max(result, j + 1);
+		}
+		result
+	};
+
+	mut row_positions = std::vector<isize>();
+	row_positions.resize(height as usize);
+	for (let i in 0..height)
+	{
+		row_positions[i] = 1'000'000;
+	}
+
+	mut col_positions = std::vector<isize>();
+	col_positions.resize(width as usize);
+	for (let j in 0..width)
+	{
+		col_positions[j] = 1'000'000;
+	}
+
+	for (let &[i, j] in galaxies)
+	{
+		row_positions[i] = 1;
+		col_positions[j] = 1;
+	}
+
+	for (let i in 1..height)
+	{
+		row_positions[i] += row_positions[i - 1];
+	}
+
+	for (let j in 1..width)
+	{
+		col_positions[j] += col_positions[j - 1];
+	}
+
+	for (let i in 0..galaxies.size())
+	{
+		for (let j in i + 1..galaxies.size())
+		{
+			let &[ai, aj] = galaxies[i];
+			let &[bi, bj] = galaxies[j];
+			mut distance = std::abs(row_positions[ai] - row_positions[bi]) + std::abs(col_positions[aj] - col_positions[bj]);
+			distance_sum += distance;
+		}
+	}
+
+	return distance_sum;
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+	let input = parse_input(input.as_str());
+
+	let part1_result = part1(input.as_slice());
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input.as_slice());
+	std::print("part 2: {}\n", part2_result);
+}
