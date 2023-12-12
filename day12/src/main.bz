@@ -1,0 +1,162 @@
+import std::format;
+import std::vector;
+import std::math;
+import common;
+
+enum spring_state
+{
+	working,
+	broken,
+	unknown,
+}
+
+struct spring_info_t
+{
+	.spring_states: std::vector<spring_state>;
+	.contiguous_counts: std::vector<usize>;
+}
+
+function parse_input(input: str) -> std::vector<spring_info_t>
+{
+	mut result = std::vector<spring_info_t>();
+	for (let line in input.by_line())
+	{
+		let &mut spring_info = result.emplace_back();
+		let [states, contiguous_counts] = line.split(' ');
+
+		for (let c in states.chars())
+		{
+			spring_info.spring_states.push_back(switch (c) {
+				'.' => .working,
+				'#' => .broken,
+				'?' => .unknown,
+				else => unreachable,
+			});
+		}
+
+		for (let count in contiguous_counts.split_by(','))
+		{
+			spring_info.contiguous_counts.push_back(parse_int(usize, count));
+		}
+	}
+
+	return move result;
+}
+
+function can_fit(spring_states: [: spring_state], contiguous_count: usize) -> bool
+{
+	if (spring_states.size() < contiguous_count)
+	{
+		return false;
+	}
+
+	for (let state in spring_states[..contiguous_count])
+	{
+		if (state == .working)
+		{
+			return false;
+		}
+	}
+
+	return spring_states.size() == contiguous_count || spring_states[contiguous_count] != .broken;
+}
+
+function count_number_of_ways(spring_states: [: spring_state], contiguous_counts: [: usize]) -> usize
+{
+	mut cached_counts = std::vector<std::vector<usize> >();
+	cached_counts.resize(contiguous_counts.size() + 1);
+	for (let &mut counts in cached_counts)
+	{
+		counts.resize(spring_states.size() + 1);
+	}
+
+	cached_counts[0, 0] = 1;
+
+	// fill first row of cached_counts
+	for (let i in 1..=spring_states.size())
+	{
+		if (spring_states[spring_states.size() - i] == .broken)
+		{
+			break;
+		}
+
+		cached_counts[0, i] = 1;
+	}
+
+	for (let contiguous_counts_size in 1..=contiguous_counts.size())
+	{
+		let count = contiguous_counts[contiguous_counts.size() - contiguous_counts_size];
+		for (let spring_states_size in 1..=spring_states.size())
+		{
+			let spring_states = spring_states[spring_states.size() - spring_states_size..];
+			if (spring_states[0] != .broken)
+			{
+				cached_counts[contiguous_counts_size, spring_states_size] += cached_counts[contiguous_counts_size, spring_states_size - 1];
+			}
+
+			let remaining_spring_states_size = spring_states_size - std::min(spring_states_size, count + 1);
+			let cached_count = cached_counts[contiguous_counts_size - 1, remaining_spring_states_size];
+
+			if (cached_count != 0 && can_fit(spring_states, count))
+			{
+				cached_counts[contiguous_counts_size, spring_states_size] += cached_count;
+			}
+		}
+	}
+
+	return cached_counts[contiguous_counts.size(), spring_states.size()];
+}
+
+function part1(infos: [: spring_info_t]) -> usize
+{
+	mut result = 0uz;
+	for (let &info in infos)
+	{
+		let n = count_number_of_ways(info.spring_states.as_slice(), info.contiguous_counts.as_slice());
+		result += n;
+	}
+	return result;
+}
+
+function append(&mut container, &elements)
+{
+	for (let &element in elements)
+	{
+		container.push_back(element);
+	}
+}
+
+function part2(infos: [: spring_info_t]) -> usize
+{
+	mut result = 0uz;
+	for (let &info in infos)
+	{
+		mut unfolded_spring_states = std::vector<spring_state>();
+		unfolded_spring_states.reserve(info.spring_states.size() * 5 + 4);
+		mut unfolded_contiguous_counts = std::vector<usize>();
+		unfolded_contiguous_counts.reserve(info.contiguous_counts.size() * 5);
+
+		unfolded_spring_states.append(info.spring_states);
+		unfolded_contiguous_counts.append(info.contiguous_counts);
+		for (let _ in 0..4)
+		{
+			unfolded_spring_states.push_back(.unknown);
+			unfolded_spring_states.append(info.spring_states);
+			unfolded_contiguous_counts.append(info.contiguous_counts);
+		}
+		let n = count_number_of_ways(unfolded_spring_states.as_slice(), unfolded_contiguous_counts.as_slice());
+		result += n;
+	}
+	return result;
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+	let input = parse_input(input.as_str());
+
+	let part1_result = part1(input.as_slice());
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input.as_slice());
+	std::print("part 2: {}\n", part2_result);
+}
