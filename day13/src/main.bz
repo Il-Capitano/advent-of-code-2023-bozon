@@ -1,0 +1,201 @@
+import std::format;
+import std::vector;
+import std::math;
+import common;
+
+type pattern_t = std::vector<std::vector<bool> >;
+
+function parse_input(input: str) -> std::vector<pattern_t>
+{
+	mut result = std::vector<pattern_t>();
+
+	for (let pattern_string in input.split_by("\n\n"))
+	{
+		let &mut pattern = result.emplace_back();
+		for (let row_string in pattern_string.by_line())
+		{
+			let &mut row = pattern.emplace_back();
+			for (let c in row_string.chars())
+			{
+				row.push_back(c == '#');
+			}
+		}
+	}
+
+	return move result;
+}
+
+enum mirror_direction
+{
+	vertical,
+	horizontal,
+}
+
+function find_mirror(pattern: &pattern_t) -> [mirror_direction, usize]
+{
+	let height = pattern.size();
+	let width = pattern[0].size();
+
+	// try to find a horizontal mirror
+	for (let i in 1..height)
+	{
+		mut is_good = true;
+		let max_size = std::min(i, height - i);
+		for (let offset in 0..max_size)
+		{
+			let upper_index = i - offset - 1;
+			let lower_index = i + offset;
+
+			for (let j in 0..width)
+			{
+				is_good &= pattern[upper_index, j] == pattern[lower_index, j];
+			}
+
+			if (!is_good)
+			{
+				break;
+			}
+		}
+
+		if (is_good)
+		{
+			return [ .horizontal, i ];
+		}
+	}
+
+	// try to find a vertical mirror
+	for (let j in 1..width)
+	{
+		mut is_good = true;
+		let max_size = std::min(j, width - j);
+		for (let offset in 0..max_size)
+		{
+			let left_index = j - offset - 1;
+			let right_index = j + offset;
+
+			for (let i in 0..height)
+			{
+				is_good &= pattern[i, left_index] == pattern[i, right_index];
+			}
+
+			if (!is_good)
+			{
+				break;
+			}
+		}
+
+		if (is_good)
+		{
+			return [ .vertical, j ];
+		}
+	}
+
+	unreachable;
+}
+
+function part1(patterns: [: pattern_t]) -> usize
+{
+	mut summary = 0uz;
+	for (let &pattern in patterns)
+	{
+		let [direction, index] = find_mirror(pattern);
+		summary += switch (direction) {
+			.vertical => index,
+			.horizontal => 100 * index,
+		};
+	}
+	return summary;
+}
+
+function find_mirror_with_smudge(pattern: &pattern_t) -> [mirror_direction, usize]
+{
+	let height = pattern.size();
+	let width = pattern[0].size();
+
+	// try to find a horizontal mirror
+	for (let i in 1..height)
+	{
+		mut non_matching_count = 0;
+		let max_size = std::min(i, height - i);
+		for (let offset in 0..max_size)
+		{
+			let upper_index = i - offset - 1;
+			let lower_index = i + offset;
+
+			for (let j in 0..width)
+			{
+				if (pattern[upper_index, j] != pattern[lower_index, j])
+				{
+					non_matching_count += 1;
+				}
+			}
+
+			if (non_matching_count > 1)
+			{
+				break;
+			}
+		}
+
+		if (non_matching_count == 1)
+		{
+			return [ .horizontal, i ];
+		}
+	}
+
+	// try to find a vertical mirror
+	for (let j in 1..width)
+	{
+		mut non_matching_count = 0;
+		let max_size = std::min(j, width - j);
+		for (let offset in 0..max_size)
+		{
+			let left_index = j - offset - 1;
+			let right_index = j + offset;
+
+			for (let i in 0..height)
+			{
+				if (pattern[i, left_index] != pattern[i, right_index])
+				{
+					non_matching_count += 1;
+				}
+			}
+
+			if (non_matching_count > 1)
+			{
+				break;
+			}
+		}
+
+		if (non_matching_count == 1)
+		{
+			return [ .vertical, j ];
+		}
+	}
+
+	unreachable;
+}
+
+function part2(patterns: [: pattern_t]) -> usize
+{
+	mut summary = 0uz;
+	for (let &pattern in patterns)
+	{
+		let [direction, index] = find_mirror_with_smudge(pattern);
+		summary += switch (direction) {
+			.vertical => index,
+			.horizontal => 100 * index,
+		};
+	}
+	return summary;
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+	let input = parse_input(input.as_str());
+
+	let part1_result = part1(input.as_slice());
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input.as_slice());
+	std::print("part 2: {}\n", part2_result);
+}
