@@ -1,0 +1,228 @@
+import std::format;
+import std::vector;
+import common;
+
+enum platform_space_kind
+{
+	empty,
+	square_rock,
+	rounded_rock,
+}
+
+type platform_t = std::vector<std::vector<platform_space_kind> >;
+
+function parse_input(input: str) -> platform_t
+{
+	mut result = platform_t();
+
+	for (let row in input.by_line())
+	{
+		let &mut result_row = result.emplace_back();
+		for (let space in row.chars())
+		{
+			result_row.push_back(switch (space) {
+				'.' => .empty,
+				'#' => .square_rock,
+				'O' => .rounded_rock,
+				else => unreachable,
+			});
+		}
+	}
+
+	return move result;
+}
+
+function tilt_north(platform: &mut platform_t)
+{
+	let height = platform.size();
+	let width = platform[0].size();
+
+	mut changed = true;
+	while (changed)
+	{
+		changed = false;
+		for (let i in 1..height)
+		{
+			for (let j in 0..width)
+			{
+				if (platform[i, j] == .rounded_rock && platform[i - 1, j] == .empty)
+				{
+					platform[i, j] = .empty;
+					platform[i - 1, j] = .rounded_rock;
+					changed = true;
+				}
+			}
+		}
+	}
+}
+
+function tilt_west(platform: &mut platform_t)
+{
+	let height = platform.size();
+	let width = platform[0].size();
+
+	mut changed = true;
+	while (changed)
+	{
+		changed = false;
+		for (let j in 1..width)
+		{
+			for (let i in 0..height)
+			{
+				if (platform[i, j] == .rounded_rock && platform[i, j - 1] == .empty)
+				{
+					platform[i, j] = .empty;
+					platform[i, j - 1] = .rounded_rock;
+					changed = true;
+				}
+			}
+		}
+	}
+}
+
+function tilt_south(platform: &mut platform_t)
+{
+	let height = platform.size();
+	let width = platform[0].size();
+
+	mut changed = true;
+	while (changed)
+	{
+		changed = false;
+		for (let i_offset in 1..height)
+		{
+			let i = height - i_offset - 1;
+			for (let j in 0..width)
+			{
+				if (platform[i, j] == .rounded_rock && platform[i + 1, j] == .empty)
+				{
+					platform[i, j] = .empty;
+					platform[i + 1, j] = .rounded_rock;
+					changed = true;
+				}
+			}
+		}
+	}
+}
+
+function tilt_east(platform: &mut platform_t)
+{
+	let height = platform.size();
+	let width = platform[0].size();
+
+	mut changed = true;
+	while (changed)
+	{
+		changed = false;
+		for (let j_offset in 1..width)
+		{
+			let j = width - j_offset - 1;
+			for (let i in 0..height)
+			{
+				if (platform[i, j] == .rounded_rock && platform[i, j + 1] == .empty)
+				{
+					platform[i, j] = .empty;
+					platform[i, j + 1] = .rounded_rock;
+					changed = true;
+				}
+			}
+		}
+	}
+}
+
+function calculate_north_total_load(platform: &platform_t) -> usize
+{
+	mut total_load = 0uz;
+	let height = platform.size();
+	for (let i in 0..height)
+	{
+		let weight = height - i;
+		for (let space in platform[i])
+		{
+			if (space == .rounded_rock)
+			{
+				total_load += weight;
+			}
+		}
+	}
+
+	return total_load;
+}
+
+function part1(platform: &platform_t) -> usize
+{
+	mut platform = platform;
+	tilt_north(platform);
+	return calculate_north_total_load(platform);
+}
+
+function platforms_equal(lhs: &platform_t, rhs: &platform_t) -> bool
+{
+	let height = lhs.size();
+	let width = lhs[0].size();
+
+	for (let i in 0..height)
+	{
+		for (let j in 0..width)
+		{
+			if (lhs[i, j] != rhs[i, j])
+			{
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+function part2(platform: &platform_t) -> usize
+{
+	mut platform = platform;
+
+	mut previous_platforms = std::vector<[usize, platform_t]>();
+
+	mut cycle_length: ?usize = null;
+	mut cycle_offset: ?usize = null;
+
+	for (let cycle_index in 0..1'000'000'000uz)
+	{
+		let total_load = calculate_north_total_load(platform);
+		for (let i in 0..previous_platforms.size())
+		{
+			if (total_load == previous_platforms[i, 0] && platforms_equal(platform, previous_platforms[i, 1]))
+			{
+				cycle_offset = i;
+				cycle_length = cycle_index - i;
+				break;
+			}
+		}
+
+		if (cycle_length != null)
+		{
+			break;
+		}
+		previous_platforms.push_back([ total_load, platform ]);
+
+		tilt_north(platform);
+		tilt_west(platform);
+		tilt_south(platform);
+		tilt_east(platform);
+	}
+
+	let cycle_length = cycle_length.get_value();
+	let cycle_offset = cycle_offset.get_value();
+
+	let result_index = (1'000'000'000 - cycle_offset) % cycle_length + cycle_offset;
+
+	return previous_platforms[result_index, 0];
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+	let input = parse_input(input.as_str());
+
+	let part1_result = part1(input);
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input);
+	std::print("part 2: {}\n", part2_result);
+}
