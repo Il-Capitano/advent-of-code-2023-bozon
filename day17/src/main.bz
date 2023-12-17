@@ -1,0 +1,366 @@
+import std::format;
+import std::vector;
+import std::utils;
+import std::math;
+import common;
+
+type heat_loss_grid_t = std::vector<std::vector<int32> >;
+
+function parse_input(input: str) -> heat_loss_grid_t
+{
+	mut result = heat_loss_grid_t();
+
+	for (let line in input.by_line())
+	{
+		let &mut row = result.emplace_back();
+		for (let c in line.chars())
+		{
+			row.push_back(c - '0');
+		}
+	}
+
+	return move result;
+}
+
+enum direction
+{
+	left = 0,
+	right = 1,
+	up = 2,
+	down = 3,
+}
+
+function enum_value = __builtin_enum_value;
+
+struct path_info_t
+{
+	.i: usize;
+	.j: usize;
+	.total_heat_loss: int32;
+	.heading_direction: direction;
+	.consecutive_straight_moves: int32;
+}
+
+function get_left_turn_info(i: usize, j: usize, height: usize, width: usize, d: direction) -> ?[usize, usize, direction]
+{
+	switch (d)
+	{
+		.left => {
+			if (i == height - 1)
+			{
+				return null;
+			}
+
+			let result: [usize, usize, direction] = [ i + 1, j, .down ];
+			return result;
+		},
+		.right => {
+			if (i == 0)
+			{
+				return null;
+			}
+
+			let result: [usize, usize, direction] = [ i - 1, j, .up ];
+			return result;
+		},
+		.up => {
+			if (j == 0)
+			{
+				return null;
+			}
+
+			let result: [usize, usize, direction] = [ i, j - 1, .left ];
+			return result;
+		},
+		.down => {
+			if (j == width - 1)
+			{
+				return null;
+			}
+
+			let result: [usize, usize, direction] = [ i, j + 1, .right ];
+			return result;
+		},
+	}
+}
+
+function get_right_turn_info(i: usize, j: usize, height: usize, width: usize, d: direction) -> ?[usize, usize, direction]
+{
+	switch (d)
+	{
+		.left => {
+			if (i == 0)
+			{
+				return null;
+			}
+
+			let result: [usize, usize, direction] = [ i - 1, j, .up ];
+			return result;
+		},
+		.right => {
+			if (i == height - 1)
+			{
+				return null;
+			}
+
+			let result: [usize, usize, direction] = [ i + 1, j, .down ];
+			return result;
+		},
+		.up => {
+			if (j == width - 1)
+			{
+				return null;
+			}
+
+			let result: [usize, usize, direction] = [ i, j + 1, .right ];
+			return result;
+		},
+		.down => {
+			if (j == 0)
+			{
+				return null;
+			}
+
+			let result: [usize, usize, direction] = [ i, j - 1, .left ];
+			return result;
+		},
+	}
+}
+
+function get_straight_info(i: usize, j: usize, height: usize, width: usize, d: direction) -> ?[usize, usize, direction]
+{
+	switch (d)
+	{
+		.left => {
+			if (j == 0)
+			{
+				return null;
+			}
+
+			let result: [usize, usize, direction] = [ i, j - 1, .left ];
+			return result;
+		},
+		.right => {
+			if (j == width - 1)
+			{
+				return null;
+			}
+
+			let result: [usize, usize, direction] = [ i, j + 1, .right ];
+			return result;
+		},
+		.up => {
+			if (i == 0)
+			{
+				return null;
+			}
+
+			let result: [usize, usize, direction] = [ i - 1, j, .up ];
+			return result;
+		},
+		.down => {
+			if (i == height - 1)
+			{
+				return null;
+			}
+
+			let result: [usize, usize, direction] = [ i + 1, j, .down ];
+			return result;
+		},
+	}
+}
+
+function reverse_queue(queue: &mut std::vector<path_info_t>)
+{
+	let size = queue.size();
+	for (let i in 0..size / 2)
+	{
+		std::swap(queue[i], queue[size - i - 1]);
+	}
+}
+
+function part1(grid: &heat_loss_grid_t) -> int32
+{
+	let height = grid.size();
+	let width = grid[0].size();
+
+	mut cost_grid = std::vector<std::vector<[4, 3: int32]> >();
+	cost_grid.resize(height);
+	for (let &mut row in cost_grid)
+	{
+		row.resize(width);
+	}
+
+	mut queue = std::vector<path_info_t>();
+
+	queue.push_back(path_info_t[ 1, 0, grid[1, 0], .down, 1 ]);
+	cost_grid[1, 0, direction.down.enum_value(), 0] = grid[1, 0];
+	queue.push_back(path_info_t[ 0, 1, grid[0, 1], .right, 1 ]);
+	cost_grid[0, 1, direction.right.enum_value(), 0] = grid[0, 1];
+
+	while (queue.size() > 0)
+	{
+		mut new_queue = std::vector<path_info_t>();
+		for (let &info in queue)
+		{
+			let left_turn_info = get_left_turn_info(info.i, info.j, height, width, info.heading_direction);
+			if (left_turn_info != null)
+			{
+				let &[i, j, d] = left_turn_info.get_value();
+				let total_heat_loss = info.total_heat_loss + grid[i, j];
+				let &mut cost_grid_entry = cost_grid[i, j, d.enum_value(), 0];
+				if (cost_grid_entry == 0 || total_heat_loss < cost_grid_entry)
+				{
+					cost_grid_entry = total_heat_loss;
+					new_queue.push_back(path_info_t[ i, j, total_heat_loss, d, 1 ]);
+				}
+			}
+
+			if (info.consecutive_straight_moves < 3)
+			{
+				let straight_info = get_straight_info(info.i, info.j, height, width, info.heading_direction);
+				if (straight_info != null)
+				{
+					let &[i, j, d] = straight_info.get_value();
+					let total_heat_loss = info.total_heat_loss + grid[i, j];
+					let &mut cost_grid_entry = cost_grid[i, j, d.enum_value(), info.consecutive_straight_moves];
+					if (cost_grid_entry == 0 || total_heat_loss < cost_grid_entry)
+					{
+						cost_grid_entry = total_heat_loss;
+						new_queue.push_back(path_info_t[ i, j, total_heat_loss, d, info.consecutive_straight_moves + 1 ]);
+					}
+				}
+			}
+
+			let right_turn_info = get_right_turn_info(info.i, info.j, height, width, info.heading_direction);
+			if (right_turn_info != null)
+			{
+				let &[i, j, d] = right_turn_info.get_value();
+				let total_heat_loss = info.total_heat_loss + grid[i, j];
+				let &mut cost_grid_entry = cost_grid[i, j, d.enum_value(), 0];
+				if (cost_grid_entry == 0 || total_heat_loss < cost_grid_entry)
+				{
+					cost_grid_entry = total_heat_loss;
+					new_queue.push_back(path_info_t[ i, j, total_heat_loss, d, 1 ]);
+				}
+			}
+		}
+		queue = move new_queue;
+		reverse_queue(queue);
+	}
+
+	let &last_costs = cost_grid[height - 1, width - 1];
+	mut result = int32.max;
+	for (let &costs in last_costs)
+	{
+		for (let cost in costs)
+		{
+			if (cost != 0)
+			{
+				result = std::min(result, cost);
+			}
+		}
+	}
+	return result;
+}
+
+function part2(grid: &heat_loss_grid_t) -> int32
+{
+	let height = grid.size();
+	let width = grid[0].size();
+
+	mut cost_grid = std::vector<std::vector<[4, 10: int32]> >();
+	cost_grid.resize(height);
+	for (let &mut row in cost_grid)
+	{
+		row.resize(width);
+	}
+
+	mut queue = std::vector<path_info_t>();
+
+	queue.push_back(path_info_t[ 1, 0, grid[1, 0], .down, 1 ]);
+	cost_grid[1, 0, direction.down.enum_value(), 0] = grid[1, 0];
+	queue.push_back(path_info_t[ 0, 1, grid[0, 1], .right, 1 ]);
+	cost_grid[0, 1, direction.right.enum_value(), 0] = grid[0, 1];
+
+	while (queue.size() > 0)
+	{
+		mut new_queue = std::vector<path_info_t>();
+		for (let &info in queue)
+		{
+			if (info.consecutive_straight_moves >= 4)
+			{
+				let left_turn_info = get_left_turn_info(info.i, info.j, height, width, info.heading_direction);
+				if (left_turn_info != null)
+				{
+					let &[i, j, d] = left_turn_info.get_value();
+					let total_heat_loss = info.total_heat_loss + grid[i, j];
+					let &mut cost_grid_entry = cost_grid[i, j, d.enum_value(), 0];
+					if (cost_grid_entry == 0 || total_heat_loss < cost_grid_entry)
+					{
+						cost_grid_entry = total_heat_loss;
+						new_queue.push_back(path_info_t[ i, j, total_heat_loss, d, 1 ]);
+					}
+				}
+			}
+
+			if (info.consecutive_straight_moves < 10)
+			{
+				let straight_info = get_straight_info(info.i, info.j, height, width, info.heading_direction);
+				if (straight_info != null)
+				{
+					let &[i, j, d] = straight_info.get_value();
+					let total_heat_loss = info.total_heat_loss + grid[i, j];
+					let &mut cost_grid_entry = cost_grid[i, j, d.enum_value(), info.consecutive_straight_moves];
+					if (cost_grid_entry == 0 || total_heat_loss < cost_grid_entry)
+					{
+						cost_grid_entry = total_heat_loss;
+						new_queue.push_back(path_info_t[ i, j, total_heat_loss, d, info.consecutive_straight_moves + 1 ]);
+					}
+				}
+			}
+
+			if (info.consecutive_straight_moves >= 4)
+			{
+				let right_turn_info = get_right_turn_info(info.i, info.j, height, width, info.heading_direction);
+				if (right_turn_info != null)
+				{
+					let &[i, j, d] = right_turn_info.get_value();
+					let total_heat_loss = info.total_heat_loss + grid[i, j];
+					let &mut cost_grid_entry = cost_grid[i, j, d.enum_value(), 0];
+					if (cost_grid_entry == 0 || total_heat_loss < cost_grid_entry)
+					{
+						cost_grid_entry = total_heat_loss;
+						new_queue.push_back(path_info_t[ i, j, total_heat_loss, d, 1 ]);
+					}
+				}
+			}
+		}
+		queue = move new_queue;
+	}
+
+	let &last_costs = cost_grid[height - 1, width - 1];
+	mut result = int32.max;
+	for (let &costs in last_costs)
+	{
+		for (let cost in costs[4..]) // minimum move distance is 4 tiles
+		{
+			if (cost != 0)
+			{
+				result = std::min(result, cost);
+			}
+		}
+	}
+	return result;
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+	let input = parse_input(input.as_str());
+
+	let part1_result = part1(input);
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input);
+	std::print("part 2: {}\n", part2_result);
+}
