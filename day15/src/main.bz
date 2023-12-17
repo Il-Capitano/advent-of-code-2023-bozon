@@ -1,0 +1,114 @@
+import std::format;
+import std::vector;
+import common;
+
+function hash(s: str) -> uint8
+{
+	mut result = 0u8;
+	for (let c in s.bytes())
+	{
+		((result += c));
+		((result *= 17));
+	}
+	return result;
+}
+
+function part1(sequence: [: str]) -> uint32
+{
+	mut hash_sum = 0u32;
+
+	for (let element in sequence)
+	{
+		hash_sum += hash(element);
+	}
+
+	return hash_sum;
+}
+
+function remove_lens(box: &mut std::vector<[str, usize]>, label: str)
+{
+	mut index: ?usize = null;
+	for (let i in 0..box.size())
+	{
+		if (box[i, 0] == label)
+		{
+			index = i;
+			break;
+		}
+	}
+
+	if (index != null)
+	{
+		let index = index.get_value();
+		for (let i in index + 1..box.size())
+		{
+			box[i - 1] = box[i];
+		}
+		box.resize(box.size() - 1);
+	}
+}
+
+function add_lens(box: &mut std::vector<[str, usize]>, label: str, focal_length: usize)
+{
+	mut index: ?usize = null;
+	for (let i in 0..box.size())
+	{
+		if (box[i, 0] == label)
+		{
+			index = i;
+			break;
+		}
+	}
+
+	if (index == null)
+	{
+		box.push_back([ label, focal_length ]);
+	}
+	else
+	{
+		box[index.get_value(), 1] = focal_length;
+	}
+}
+
+function part2(sequence: [: str]) -> usize
+{
+	mut boxes = [256: std::vector<[str, usize]>]();
+
+	for (let instruction in sequence)
+	{
+		if (instruction.ends_with("-"))
+		{
+			let [label, _] = instruction.split('-');
+			let box = hash(label);
+			remove_lens(boxes[box], label);
+		}
+		else
+		{
+			let [label, focal_length] = instruction.split('=');
+			let box = hash(label);
+			let focal_length = parse_int(usize, focal_length);
+			add_lens(boxes[box], label, focal_length);
+		}
+	}
+
+	mut total_focusing_power = 0uz;
+	for (let box in 0..boxes.size())
+	{
+		for (let lens in 0..boxes[box].size())
+		{
+			total_focusing_power += (box + 1) * (lens + 1) * boxes[box, lens, 1];
+		}
+	}
+	return total_focusing_power;
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+	let input = input.as_str().trim().split_by(',').collect();
+
+	let part1_result = part1(input.as_slice());
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input.as_slice());
+	std::print("part 2: {}\n", part2_result);
+}
