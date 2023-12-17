@@ -1,0 +1,200 @@
+import std::format;
+import std::vector;
+import std::meta::types;
+import std::math;
+import common;
+
+enum tile_kind
+{
+	empty, // '.'
+	left_mirror, // '\'
+	right_mirror, // '/'
+	vertical_splitter, // '|'
+	horizontal_splitter, // '-'
+}
+
+enum direction
+{
+	left = 0,
+	right = 1,
+	up = 2,
+	down = 3,
+}
+
+type grid_t = std::vector<std::vector<tile_kind> >;
+type energized_grid_t = std::vector<std::vector<[4: bool]> >;
+function enum_value = __builtin_enum_value;
+
+function opposite(d: direction) -> direction
+{
+	return switch (d) {
+		.left => .right,
+		.right => .left,
+		.up => .down,
+		.down => .up,
+	};
+}
+
+function parse_input(input: str) -> grid_t
+{
+	mut result = grid_t();
+
+	for (let line in input.by_line())
+	{
+		let &mut row = result.emplace_back();
+		for (let c in line.chars())
+		{
+			row.push_back(switch (c) {
+				'.' => .empty,
+				'\\' => .left_mirror,
+				'/' => .right_mirror,
+				'|' => .vertical_splitter,
+				'-' => .horizontal_splitter,
+				else => unreachable,
+			});
+		}
+	}
+
+	return move result;
+}
+
+function make_energized_grid(height: usize, width: usize) -> energized_grid_t
+{
+	mut result = energized_grid_t();
+	result.resize(height);
+	for (let &mut row in result)
+	{
+		row.resize(width);
+	}
+	return move result;
+}
+
+function trace_beam(grid: &grid_t, energized_grid: &mut energized_grid_t, mut i: isize, mut j: isize, mut d: direction)
+{
+	let height = grid.size() as isize;
+	let width = grid[0].size() as isize;
+	while (i >= 0 && i < height && j >= 0 && j < width && energized_grid[i, j, d.opposite().enum_value()] == false)
+	{
+		// incoming beam
+		energized_grid[i, j, d.opposite().enum_value()] = true;
+
+		// calculate the outgoing beam direction
+		switch (grid[i, j])
+		{
+			.empty => {
+				// no change
+			},
+			.left_mirror => {
+				d = switch (d) {
+					.left => .up,
+					.right => .down,
+					.up => .left,
+					.down => .right,
+				};
+			},
+			.right_mirror => {
+				d = switch (d) {
+					.left => .down,
+					.right => .up,
+					.up => .right,
+					.down => .left,
+				};
+			},
+			.vertical_splitter => {
+				switch (d)
+				{
+					.left, .right => {
+						d = .up;
+						energized_grid[i, j, direction.down.enum_value()] = true;
+						trace_beam(grid, energized_grid, i + 1, j, .down);
+					},
+					.up, .down => {
+						// no change
+					},
+				}
+			},
+			.horizontal_splitter => {
+				switch (d)
+				{
+					.left, .right => {
+						// no change
+					},
+					.up, .down => {
+						d = .left;
+						energized_grid[i, j, direction.right.enum_value()] = true;
+						trace_beam(grid, energized_grid, i, j + 1, .right);
+					},
+				}
+			},
+		}
+
+		// outgoing beam
+		energized_grid[i, j, d.enum_value()] = true;
+
+		switch (d)
+		{
+			.left => j -= 1,
+			.right => j += 1,
+			.up => i -= 1,
+			.down => i += 1,
+		}
+	}
+}
+
+function calculate_energized_count(grid: &grid_t, i: isize, j: isize, d: direction) -> int32
+{
+	let height = grid.size();
+	let width = grid[0].size();
+	mut energized_grid = make_energized_grid(height, width);
+	trace_beam(grid, energized_grid, i, j, d);
+
+	mut energized_count = 0;
+
+	for (let &row in energized_grid)
+	{
+		for (let &is_energized in row)
+		{
+			if (is_energized[0] || is_energized[1] || is_energized[2] || is_energized[3])
+			{
+				energized_count += 1;
+			}
+		}
+	}
+
+	return energized_count;
+}
+
+function part1(grid: &grid_t) -> int32
+{
+	return calculate_energized_count(grid, 0, 0, .right);
+}
+
+function part2(grid: &grid_t) -> int32
+{
+	let height = grid.size() as isize;
+	let width = grid[0].size() as isize;
+
+	mut max_energized_count = 0;
+	for (let i in 0..height)
+	{
+		max_energized_count = std::max(max_energized_count, calculate_energized_count(grid, i, 0, .right));
+		max_energized_count = std::max(max_energized_count, calculate_energized_count(grid, i, width - 1, .left));
+	}
+	for (let j in 0..width)
+	{
+		max_energized_count = std::max(max_energized_count, calculate_energized_count(grid, 0, j, .down));
+		max_energized_count = std::max(max_energized_count, calculate_energized_count(grid, height - 1, j, .up));
+	}
+	return max_energized_count;
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+	let input = parse_input(input.as_str());
+
+	let part1_result = part1(input);
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input);
+	std::print("part 2: {}\n", part2_result);
+}
