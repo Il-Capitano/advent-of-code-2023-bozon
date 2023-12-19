@@ -1,0 +1,313 @@
+import std::format;
+import std::vector;
+import std::math;
+import common;
+
+enum operation
+{
+	less_than,
+	greater_than,
+}
+
+enum property
+{
+	x, m, a, s
+}
+
+struct rule_t
+{
+	.prop: property;
+	.op: operation;
+	.value: int32;
+	.destination: str;
+}
+
+struct workflow_t
+{
+	.name: str;
+	.rules: std::vector<rule_t>;
+	.base_destination: str;
+}
+
+struct part_t
+{
+	.x: int32;
+	.m: int32;
+	.a: int32;
+	.s: int32;
+}
+
+type input_t = [std::vector<workflow_t>, std::vector<part_t>];
+
+function parse_input(input: str) -> input_t
+{
+	mut workflows = std::vector<workflow_t>();
+	mut parts = std::vector<part_t>();
+
+	let [workflows_input, parts_input] = input.split("\n\n");
+
+	for (let line in workflows_input.by_line())
+	{
+		let [name, line] = line.split('{');
+		let [rules_string, _] = line.split('}');
+
+		mut rules = std::vector<rule_t>();
+		mut base_destination = "";
+		for (let rule in rules_string.split_by(','))
+		{
+			let [condition, destination] = rule.split(':');
+			if (destination == "")
+			{
+				base_destination = condition;
+				break;
+			}
+
+			let prop: property = switch (*condition.begin_ptr() as char) {
+				'x' => .x,
+				'm' => .m,
+				'a' => .a,
+				's' => .s,
+				else => unreachable,
+			};
+			let op: operation = switch (*(condition.begin_ptr() + 1) as char) {
+				'<' => .less_than,
+				'>' => .greater_than,
+				else => unreachable,
+			};
+			let value = __builtin_str_from_ptrs(condition.begin_ptr() + 2, condition.end_ptr());
+			rules.push_back(rule_t[ prop, op, parse_int(int32, value), destination ]);
+		}
+		workflows.push_back(workflow_t[
+			name,
+			move rules,
+			base_destination,
+		]);
+	}
+
+	for (let line in parts_input.by_line())
+	{
+		let [x, line] = line.split(',');
+		let [m, line] = line.split(',');
+		let [a, s] = line.split(',');
+		let x = x.split('=')[1];
+		let m = m.split('=')[1];
+		let a = a.split('=')[1];
+		let s = s.split('=')[1].split('}')[0];
+
+		parts.push_back(part_t[
+			parse_int(int32, x),
+			parse_int(int32, m),
+			parse_int(int32, a),
+			parse_int(int32, s),
+		]);
+	}
+
+	return [ move workflows, move parts ];
+}
+
+function get_workflow(workflows: [: workflow_t], name: str) -> &workflow_t
+{
+	for (let &workflow in workflows)
+	{
+		if (workflow.name == name)
+		{
+			return workflow;
+		}
+	}
+	unreachable;
+}
+
+function run_workflow(workflows: [: workflow_t], part: &part_t) -> bool
+{
+	mut current_workflow_name = "in";
+	while (true)
+	{
+		let &workflow = get_workflow(workflows, current_workflow_name);
+		mut condition_matched = false;
+		for (let &rule in workflow.rules)
+		{
+			let property = switch (rule.prop) {
+				.x => part.x,
+				.m => part.m,
+				.a => part.a,
+				.s => part.s,
+			};
+			let condition = switch (rule.op) {
+				.less_than => property < rule.value,
+				.greater_than => property > rule.value,
+			};
+			if (condition)
+			{
+				current_workflow_name = rule.destination;
+				condition_matched = true;
+				break;
+			}
+		}
+		if (!condition_matched)
+		{
+			current_workflow_name = workflow.base_destination;
+		}
+
+		if (current_workflow_name == "A")
+		{
+			return true;
+		}
+		else if (current_workflow_name == "R")
+		{
+			return false;
+		}
+	}
+	unreachable;
+}
+
+function part1(input: &input_t) -> int32
+{
+	let &[workflows, parts] = input;
+
+	mut property_sum = 0;
+	for (let &part in parts)
+	{
+		if (run_workflow(workflows.as_slice(), part))
+		{
+			property_sum += part.x + part.m + part.a + part.s;
+		}
+	}
+
+	return property_sum;
+}
+
+function calculate_combination_count(
+	workflows: [: workflow_t],
+	workflow_name: str,
+	mut x_range: [int64, int64],
+	mut m_range: [int64, int64],
+	mut a_range: [int64, int64],
+	mut s_range: [int64, int64],
+) -> int64
+{
+	if (workflow_name == "A")
+	{
+		let x_count = x_range[1] - x_range[0] + 1;
+		let m_count = m_range[1] - m_range[0] + 1;
+		let a_count = a_range[1] - a_range[0] + 1;
+		let s_count = s_range[1] - s_range[0] + 1;
+		return x_count * m_count * a_count * s_count;
+	}
+	else if (workflow_name == "R")
+	{
+		return 0;
+	}
+
+	let &workflow = get_workflow(workflows, workflow_name);
+	mut combination_count = 0i64;
+	for (let &rule in workflow.rules)
+	{
+		let &mut range = switch (rule.prop) {
+			.x => x_range,
+			.m => m_range,
+			.a => a_range,
+			.s => s_range,
+		};
+
+		switch (rule.op)
+		{
+			.less_than => {
+				if (range[1] <= rule.value)
+				{
+					range[1] = std::min(range[1], rule.value);
+					combination_count += calculate_combination_count(
+						workflows,
+						rule.destination,
+						x_range,
+						m_range,
+						a_range,
+						s_range,
+					);
+					return combination_count;
+				}
+				else if (range[0] < rule.value)
+				{
+					let range_copy = range;
+					range[1] = rule.value - 1;
+					combination_count += calculate_combination_count(
+						workflows,
+						rule.destination,
+						x_range,
+						m_range,
+						a_range,
+						s_range,
+					);
+					range = range_copy;
+				}
+
+				range[0] = std::max(range[0], rule.value);
+			},
+			.greater_than => {
+				if (range[0] >= rule.value)
+				{
+					range[0] = std::max(range[0], rule.value);
+					combination_count += calculate_combination_count(
+						workflows,
+						rule.destination,
+						x_range,
+						m_range,
+						a_range,
+						s_range,
+					);
+					return combination_count;
+				}
+				else if (range[1] > rule.value)
+				{
+					let range_copy = range;
+					range[0] = rule.value + 1;
+					combination_count += calculate_combination_count(
+						workflows,
+						rule.destination,
+						x_range,
+						m_range,
+						a_range,
+						s_range,
+					);
+					range = range_copy;
+				}
+
+				range[1] = std::min(range[1], rule.value);
+			},
+		}
+	}
+
+	combination_count += calculate_combination_count(
+		workflows,
+		workflow.base_destination,
+		x_range,
+		m_range,
+		a_range,
+		s_range,
+	);
+
+	return combination_count;
+}
+
+function part2(input: &input_t) -> int64
+{
+	let &[workflows, _] = input;
+	return calculate_combination_count(
+		workflows.as_slice(),
+		"in",
+		[ 1, 4000 ],
+		[ 1, 4000 ],
+		[ 1, 4000 ],
+		[ 1, 4000 ],
+	);
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+	let input = parse_input(input.as_str());
+
+	let part1_result = part1(input);
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input);
+	std::print("part 2: {}\n", part2_result);
+}
