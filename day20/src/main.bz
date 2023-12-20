@@ -1,0 +1,369 @@
+import std::format;
+import std::vector;
+import std::utils;
+import common;
+
+enum pulse_kind
+{
+	low,
+	high,
+}
+
+enum flip_flop_state
+{
+	off,
+	on,
+}
+
+struct flip_flop_module_t
+{
+	.name: str;
+	.state: flip_flop_state;
+	.destinations: std::vector<str>;
+}
+
+struct conjunction_module_t
+{
+	.name: str;
+	.inputs: std::vector<[str, pulse_kind]>;
+	.destinations: std::vector<str>;
+}
+
+struct network_t
+{
+	.flip_flop_modules: std::vector<flip_flop_module_t>;
+	.conjunction_modules: std::vector<conjunction_module_t>;
+	.broadcaster_destinations: std::vector<str>;
+}
+
+function parse_input(input: str) -> network_t
+{
+	mut network = network_t();
+
+	for (let line in input.by_line())
+	{
+		let [module_name, connections] = line.split(" -> ");
+
+		let destinations = connections.split_by(", ").collect();
+
+		if (module_name == "broadcaster")
+		{
+			network.broadcaster_destinations = move destinations;
+			continue;
+		}
+		else if (module_name.starts_with("%"))
+		{
+			let module_name = __builtin_str_from_ptrs(module_name.begin_ptr() + 1, module_name.end_ptr());
+			network.flip_flop_modules.push_back(flip_flop_module_t[
+				module_name,
+				.off,
+				move destinations,
+			]);
+		}
+		else
+		{
+			std::assert(module_name.starts_with("&"));
+			let module_name = __builtin_str_from_ptrs(module_name.begin_ptr() + 1, module_name.end_ptr());
+			network.conjunction_modules.push_back(conjunction_module_t[
+				module_name,
+				std::vector<[str, pulse_kind]>(),
+				move destinations,
+			]);
+		}
+	}
+
+	for (let &destination in network.broadcaster_destinations)
+	{
+		for (let &mut cm in network.conjunction_modules)
+		{
+			if (cm.name == destination)
+			{
+				cm.inputs.push_back([ "broadcaster", .low ]);
+			}
+		}
+	}
+
+	for (let &flip_flop_module in network.flip_flop_modules)
+	{
+		for (let &destination in flip_flop_module.destinations)
+		{
+			for (let &mut cm in network.conjunction_modules)
+			{
+				if (cm.name == destination)
+				{
+					cm.inputs.push_back([ flip_flop_module.name, .low ]);
+				}
+			}
+		}
+	}
+
+	for (let &conjunction_module in network.conjunction_modules)
+	{
+		for (let &destination in conjunction_module.destinations)
+		{
+			for (let &mut cm in network.conjunction_modules)
+			{
+				if (cm.name == destination)
+				{
+					cm.inputs.push_back([ conjunction_module.name, .low ]);
+				}
+			}
+		}
+	}
+
+	return move network;
+}
+
+function get_flip_flop_module(network: &mut network_t, name: str) -> ?*mut flip_flop_module_t
+{
+	for (let &mut flip_flop_module in network.flip_flop_modules)
+	{
+		if (flip_flop_module.name == name)
+		{
+			return &flip_flop_module;
+		}
+	}
+	return null;
+}
+
+function get_conjunction_module(network: &mut network_t, name: str) -> ?*mut conjunction_module_t
+{
+	for (let &mut conjunction_module in network.conjunction_modules)
+	{
+		if (conjunction_module.name == name)
+		{
+			return &conjunction_module;
+		}
+	}
+	return null;
+}
+
+function part1(network: &network_t) -> usize
+{
+	mut low_pulse_kind = 0uz;
+	mut high_pulse_kind = 0uz;
+
+	mut network = network;
+
+	for (let _ in 0..1000)
+	{
+		mut pulses_to_process = std::vector<[str, str, pulse_kind]>();
+		low_pulse_kind += 1; // button press
+		for (let &dest in network.broadcaster_destinations)
+		{
+			pulses_to_process.push_back([ "broadcaster", dest, .low ]);
+		}
+
+		while (pulses_to_process.size() > 0)
+		{
+			mut next_pulses_to_process = std::vector<[str, str, pulse_kind]>();
+			for (let &[source, name, pulse] in pulses_to_process)
+			{
+				switch (pulse)
+				{
+					.low => low_pulse_kind += 1,
+					.high => high_pulse_kind += 1,
+				}
+
+				let flip_flop_module = network.get_flip_flop_module(name);
+				if (flip_flop_module != null)
+				{
+					let &mut flip_flop_module = *flip_flop_module.get_value();
+					if (pulse == .low)
+					{
+						let pulse_to_send: pulse_kind = switch (flip_flop_module.state) {
+							.off => {
+								flip_flop_module.state = .on;
+								.high
+							},
+							.on => {
+								flip_flop_module.state = .off;
+								.low
+							},
+						};
+
+						for (let &dest in flip_flop_module.destinations)
+						{
+							next_pulses_to_process.push_back([ flip_flop_module.name, dest, pulse_to_send ]);
+						}
+					}
+					continue;
+				}
+
+				let conjunction_module = network.get_conjunction_module(name);
+				if (conjunction_module != null)
+				{
+					let &mut conjunction_module = *conjunction_module.get_value();
+
+					mut is_all_high = true;
+					for (let &mut [input_name, last_pulse] in conjunction_module.inputs)
+					{
+						if (input_name == source)
+						{
+							last_pulse = pulse;
+						}
+						is_all_high &= last_pulse == .high;
+					}
+
+					let pulse_to_send: pulse_kind = if (is_all_high) { .low } else { .high };
+
+					for (let &dest in conjunction_module.destinations)
+					{
+						next_pulses_to_process.push_back([ conjunction_module.name, dest, pulse_to_send ]);
+					}
+					continue;
+				}
+			}
+			pulses_to_process = move next_pulses_to_process;
+		}
+	}
+
+	return low_pulse_kind * high_pulse_kind;
+}
+
+function gcd(mut a: usize, mut b: usize) -> usize
+{
+	while (b != 0)
+	{
+		let t = b;
+		b = a % b;
+		a = t;
+	}
+	return a;
+}
+
+function lcm(a: usize, b: usize) -> usize
+{
+	return a * (b / gcd(a, b));
+}
+
+function part2(network: &network_t) -> usize
+{
+	let rx_predecessor_name = {
+		mut result: ?*conjunction_module_t = null;
+		for (let &module in network.conjunction_modules)
+		{
+			if (module.destinations.size() == 1 && module.destinations[0] == "rx")
+			{
+				result = &module;
+				break;
+			}
+		}
+		result->name
+	};
+
+	mut network = network;
+	mut button_presses = 0uz;
+
+	mut rx_predecessor_input_periods = std::vector<[str, usize]>();
+
+	while (true)
+	{
+		mut pulses_to_process = std::vector<[str, str, pulse_kind]>();
+		button_presses += 1;
+		for (let &dest in network.broadcaster_destinations)
+		{
+			pulses_to_process.push_back([ "broadcaster", dest, .low ]);
+		}
+
+		if (rx_predecessor_input_periods.size() == network.get_conjunction_module(rx_predecessor_name)->inputs.size())
+		{
+			mut result = 1uz;
+			for (let &[_, period] in rx_predecessor_input_periods)
+			{
+				result = lcm(result, period);
+			}
+			return result;
+		}
+
+		while (pulses_to_process.size() > 0)
+		{
+			mut next_pulses_to_process = std::vector<[str, str, pulse_kind]>();
+			for (let &[source, name, pulse] in pulses_to_process)
+			{
+				if (pulse == .high && name == rx_predecessor_name)
+				{
+					let already_seen = {
+						mut result = false;
+						for (let &[input_name, _] in rx_predecessor_input_periods)
+						{
+							if (input_name == source)
+							{
+								result = true;
+								break;
+							}
+						}
+						result
+					};
+					if (!already_seen)
+					{
+						rx_predecessor_input_periods.push_back([ source, button_presses ]);
+					}
+				}
+
+				let flip_flop_module = network.get_flip_flop_module(name);
+				if (flip_flop_module != null)
+				{
+					let &mut flip_flop_module = *flip_flop_module.get_value();
+					if (pulse == .low)
+					{
+						let pulse_to_send: pulse_kind = switch (flip_flop_module.state) {
+							.off => {
+								flip_flop_module.state = .on;
+								.high
+							},
+							.on => {
+								flip_flop_module.state = .off;
+								.low
+							},
+						};
+
+						for (let &dest in flip_flop_module.destinations)
+						{
+							next_pulses_to_process.push_back([ flip_flop_module.name, dest, pulse_to_send ]);
+						}
+					}
+					continue;
+				}
+
+				let conjunction_module = network.get_conjunction_module(name);
+				if (conjunction_module != null)
+				{
+					let &mut conjunction_module = *conjunction_module.get_value();
+
+					mut is_all_high = true;
+					for (let &mut [input_name, last_pulse] in conjunction_module.inputs)
+					{
+						if (input_name == source)
+						{
+							last_pulse = pulse;
+						}
+						is_all_high &= last_pulse == .high;
+					}
+
+					let pulse_to_send: pulse_kind = if (is_all_high) { .low } else { .high };
+
+					for (let &dest in conjunction_module.destinations)
+					{
+						next_pulses_to_process.push_back([ conjunction_module.name, dest, pulse_to_send ]);
+					}
+					continue;
+				}
+			}
+			pulses_to_process = move next_pulses_to_process;
+		}
+	}
+
+	return 0;
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+	let input = parse_input(input.as_str());
+
+	let part1_result = part1(input);
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input);
+	std::print("part 2: {}\n", part2_result);
+}
