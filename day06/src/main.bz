@@ -66,8 +66,6 @@ function get_better_count(total_time: int64, total_distance: int64) -> int64
 		max_hold_time
 	};
 
-	std::print("{}, {}\n", min_hold_time, max_hold_time);
-
 	return max_hold_time - min_hold_time + 1;
 }
 
