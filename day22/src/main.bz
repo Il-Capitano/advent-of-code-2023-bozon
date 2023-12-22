@@ -1,0 +1,296 @@
+import std::format;
+import std::vector;
+import std::utils;
+import std::math;
+import common;
+
+struct vec3
+{
+	.x: int32;
+	.y: int32;
+	.z: int32;
+}
+
+struct brick_t
+{
+	.begin: vec3;
+	.end: vec3;
+}
+
+function parse_position(s: str) -> vec3
+{
+	let [x, s] = s.split(',');
+	let [y, z] = s.split(',');
+	return vec3[
+		parse_int(int32, x),
+		parse_int(int32, y),
+		parse_int(int32, z),
+	];
+}
+
+function parse_input(input: str) -> std::vector<brick_t>
+{
+	mut result = std::vector<brick_t>();
+
+	for (let line in input.by_line())
+	{
+		let [begin, end] = line.split('~');
+		result.push_back(brick_t[
+			parse_position(begin),
+			parse_position(end),
+		]);
+	}
+
+	return move result;
+}
+
+consteval layer_size = 10;
+type layer_t = [layer_size, layer_size: int32];
+
+function set_brick_id(grid: &mut std::vector<layer_t>, brick: &brick_t, id: int32)
+{
+	for (let z in brick.begin.z..=brick.end.z)
+	{
+		for (let x in brick.begin.x..=brick.end.x)
+		{
+			for (let y in brick.begin.y..=brick.end.y)
+			{
+				grid[z, x, y] = id;
+			}
+		}
+	}
+}
+
+function settle_brick(grid: &mut std::vector<layer_t>, brick: &mut brick_t)
+{
+	let id = grid[brick.begin.z, brick.begin.x, brick.begin.y];
+
+	mut settled_z = brick.begin.z;
+
+	while ({
+		mut is_floating = true;
+		for (let x in brick.begin.x..=brick.end.x)
+		{
+			for (let y in brick.begin.y..=brick.end.y)
+			{
+				is_floating &= grid[settled_z - 1, x, y] == 0;
+			}
+		}
+		is_floating
+	})
+	{
+		settled_z -= 1;
+	}
+
+	if (settled_z == brick.begin.z)
+	{
+		return;
+	}
+
+	set_brick_id(grid, brick, 0);
+
+	let settled_z_end = brick.end.z - (brick.begin.z - settled_z);
+	brick.begin.z = settled_z;
+	brick.end.z = settled_z_end;
+
+	set_brick_id(grid, brick, id);
+}
+
+function is_settled_filtered(grid: &std::vector<layer_t>, pos: vec3, filter_id: int32) -> bool
+{
+	let id = grid[pos.z, pos.x, pos.y];
+
+	let below_id = grid[pos.z - 1, pos.x, pos.y];
+	if (below_id != 0 && below_id != filter_id)
+	{
+		return true;
+	}
+
+	for (mut x = pos.x - 1; x >= 0 && grid[pos.z, x, pos.y] == id; --x)
+	{
+		let below_id = grid[pos.z - 1, x, pos.y];
+		if (below_id != 0 && below_id != filter_id)
+		{
+			return true;
+		}
+	}
+
+	for (mut x = pos.x + 1; x < layer_size && grid[pos.z, x, pos.y] == id; ++x)
+	{
+		let below_id = grid[pos.z - 1, x, pos.y];
+		if (below_id != 0 && below_id != filter_id)
+		{
+			return true;
+		}
+	}
+
+	for (mut y = pos.y - 1; y >= 0 && grid[pos.z, pos.x, y] == id; --y)
+	{
+		let below_id = grid[pos.z - 1, pos.x, y];
+		if (below_id != 0 && below_id != filter_id)
+		{
+			return true;
+		}
+	}
+
+	for (mut y = pos.y + 1; y < layer_size && grid[pos.z, pos.x, y] == id; ++y)
+	{
+		let below_id = grid[pos.z - 1, pos.x, y];
+		if (below_id != 0 && below_id != filter_id)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+function get_settled_bricks(bricks: [: brick_t]) -> [std::vector<layer_t>, std::vector<brick_t>]
+{
+	mut min_x = 100;
+	mut min_y = 100;
+	mut min_z = 100;
+	mut max_x = 0;
+	mut max_y = 0;
+	mut max_z = 0;
+	for (let &brick in bricks)
+	{
+		std::assert(brick.begin.x <= brick.end.x);
+		std::assert(brick.begin.y <= brick.end.y);
+		std::assert(brick.begin.z <= brick.end.z);
+		min_x = std::min(min_x, std::min(brick.begin.x, brick.end.x));
+		min_y = std::min(min_y, std::min(brick.begin.y, brick.end.y));
+		min_z = std::min(min_z, std::min(brick.begin.z, brick.end.z));
+		max_x = std::max(max_x, std::max(brick.begin.x, brick.end.x));
+		max_y = std::max(max_y, std::max(brick.begin.y, brick.end.y));
+		max_z = std::max(max_z, std::max(brick.begin.z, brick.end.z));
+	}
+	std::assert(min_x >= 0 && min_y >= 0);
+	std::assert(max_x < layer_size && max_y < layer_size);
+	std::assert(min_z == 1);
+
+	mut bricks = std::vector<brick_t>(bricks);
+	mut grid = std::vector<layer_t>();
+	grid.resize(max_z as usize + 2);
+
+	// fill the ground
+	for (let &mut row in grid[0])
+	{
+		for (let &mut cube in row)
+		{
+			cube = bricks.size() as int32 + 1;
+		}
+	}
+
+	for (let i in 0..bricks.size() as int32)
+	{
+		let id = i + 1;
+		let &brick = bricks[i];
+
+		set_brick_id(grid, brick, id);
+	}
+
+	mut is_settled = std::vector<bool>();
+	is_settled.resize(bricks.size());
+
+	for (let z in 1..=max_z)
+	{
+		for (let x in 0..layer_size)
+		{
+			for (let y in 0..layer_size)
+			{
+				if (grid[z, x, y] != 0 && !is_settled[grid[z, x, y] - 1])
+				{
+					let id = grid[z, x, y];
+					settle_brick(grid, bricks[id - 1]);
+					is_settled[id - 1] = true;
+				}
+			}
+		}
+	}
+
+	return [ move grid, move bricks ];
+}
+
+function part1(bricks: [: brick_t]) -> int32
+{
+	let [grid, bricks] = get_settled_bricks(bricks);
+
+	mut disintegratable_count = 0;
+	for (let i in 0..bricks.size() as int32)
+	{
+		let id = i + 1;
+		let &brick = bricks[i];
+
+		mut is_disintegratable = true;
+		for (let x in brick.begin.x..=brick.end.x)
+		{
+			for (let y in brick.begin.y..=brick.end.y)
+			{
+				if (grid[brick.end.z + 1, x, y] != 0)
+				{
+					is_disintegratable &= is_settled_filtered(grid, vec3[ x, y, brick.end.z + 1 ], id);
+				}
+			}
+		}
+		if (is_disintegratable)
+		{
+			disintegratable_count += 1;
+		}
+	}
+
+	return disintegratable_count;
+}
+
+function part2(bricks: [: brick_t]) -> int32
+{
+	let [grid, bricks] = get_settled_bricks(bricks);
+
+	mut fall_count_sum = 0;
+	for (let &brick in bricks)
+	{
+		mut grid = grid;
+		mut bricks = bricks;
+
+		set_brick_id(grid, brick, 0);
+
+		mut is_settled = std::vector<bool>();
+		is_settled.resize(bricks.size());
+
+		mut fall_count = 0;
+		for (let z in brick.begin.z..grid.size() as int32)
+		{
+			for (let x in 0..layer_size)
+			{
+				for (let y in 0..layer_size)
+				{
+					if (grid[z, x, y] != 0 && !is_settled[grid[z, x, y] - 1])
+					{
+						let id = grid[z, x, y];
+						let z_before = bricks[id - 1].begin.z;
+						settle_brick(grid, bricks[id - 1]);
+						if (z_before != bricks[id - 1].begin.z)
+						{
+							fall_count += 1;
+						}
+						is_settled[id - 1] = true;
+					}
+				}
+			}
+		}
+		fall_count_sum += fall_count;
+	}
+
+	return fall_count_sum;
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+	let input = parse_input(input.as_str());
+
+	let part1_result = part1(input.as_slice());
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input.as_slice());
+	std::print("part 2: {}\n", part2_result);
+}
