@@ -1,0 +1,234 @@
+import std::format;
+import std::vector;
+import std::math;
+import common;
+
+enum tile_kind
+{
+	forest,
+	path,
+	north_slope,
+	west_slope,
+	south_slope,
+	east_slope,
+}
+
+type map_t = std::vector<std::vector<tile_kind> >;
+
+function parse_input(input: str) -> map_t
+{
+	mut result = map_t();
+
+	for (let line in input.by_line())
+	{
+		let &mut row = result.emplace_back();
+		for (let c in line.chars())
+		{
+			row.push_back(switch (c) {
+				'#' => .forest,
+				'.' => .path,
+				'^' => .north_slope,
+				'<' => .west_slope,
+				'v' => .south_slope,
+				'>' => .east_slope,
+				else => unreachable,
+			});
+		}
+	}
+
+	return move result;
+}
+
+type visited_map_t = std::vector<std::vector<bool> >;
+
+function make_visited_map(height: usize, width: usize) -> visited_map_t
+{
+	mut result = visited_map_t();
+
+	result.resize(height);
+	for (let &mut row in result)
+	{
+		row.resize(width);
+	}
+
+	return move result;
+}
+
+function path_helper(map: &map_t, visited: &mut visited_map_t, i: usize, j: usize, distance: usize) -> usize
+{
+	if (i == map.size() - 1)
+	{
+		return distance;
+	}
+
+	switch (map[i, j])
+	{
+		.forest => unreachable,
+		.path => {
+			mut result = 0uz;
+			if (i != 0 && map[i - 1, j] != .forest && !visited[i - 1, j])
+			{
+				visited[i - 1, j] = true;
+				defer visited[i - 1, j] = false;
+				result = std::max(result, path_helper(map, visited, i - 1, j, distance + 1));
+			}
+			if (map[i + 1, j] != .forest && !visited[i + 1, j])
+			{
+				visited[i + 1, j] = true;
+				defer visited[i + 1, j] = false;
+				result = std::max(result, path_helper(map, visited, i + 1, j, distance + 1));
+			}
+			if (map[i, j - 1] != .forest && !visited[i, j - 1])
+			{
+				visited[i, j - 1] = true;
+				defer visited[i, j - 1] = false;
+				result = std::max(result, path_helper(map, visited, i, j - 1, distance + 1));
+			}
+			if (map[i, j + 1] != .forest && !visited[i, j + 1])
+			{
+				visited[i, j + 1] = true;
+				defer visited[i, j + 1] = false;
+				result = std::max(result, path_helper(map, visited, i, j + 1, distance + 1));
+			}
+			return result;
+		},
+		.north_slope => {
+			return if (map[i - 1, j] == .forest || visited[i - 1, j]) {
+				0
+			} else {
+				visited[i - 1, j] = true;
+				defer visited[i - 1, j] = false;
+				path_helper(map, visited, i - 1, j, distance + 1)
+			};
+		},
+		.west_slope => {
+			return if (map[i, j - 1] == .forest || visited[i, j - 1]) {
+				0
+			} else {
+				visited[i, j - 1] = true;
+				defer visited[i, j - 1] = false;
+				path_helper(map, visited, i, j - 1, distance + 1)
+			};
+		},
+		.south_slope => {
+			return if (map[i + 1, j] == .forest || visited[i + 1, j]) {
+				0
+			} else {
+				visited[i + 1, j] = true;
+				defer visited[i + 1, j] = false;
+				path_helper(map, visited, i + 1, j, distance + 1)
+			};
+		},
+		.east_slope => {
+			return if (map[i, j + 1] == .forest || visited[i, j + 1]) {
+				0
+			} else {
+				visited[i, j + 1] = true;
+				defer visited[i, j + 1] = false;
+				path_helper(map, visited, i, j + 1, distance + 1)
+			};
+		},
+	}
+}
+
+function part1(map: &map_t) -> usize
+{
+	let height = map.size();
+	let width = map[0].size();
+	mut visited = make_visited_map(height, width);
+
+	let i = 0uz;
+	let j = {
+		mut start_j = 0uz;
+		for (let j in 0..width)
+		{
+			if (map[0, j] != .forest)
+			{
+				start_j = j;
+				break;
+			}
+		}
+		start_j
+	};
+	visited[i, j] = true;
+
+	return path_helper(map, visited, i, j, 0);
+}
+
+function path_helper_non_slippery(map: &map_t, visited: &mut visited_map_t, i: usize, j: usize, distance: usize) -> usize
+{
+	// std::print("({}, {}) {}\n", i, j, distance);
+	if (i == map.size() - 1)
+	{
+		return distance;
+	}
+
+	switch (map[i, j])
+	{
+		.forest => unreachable,
+		.path, .north_slope, .west_slope, .south_slope, .east_slope => {
+			mut result = 0uz;
+			if (i != 0 && map[i - 1, j] != .forest && !visited[i - 1, j])
+			{
+				visited[i - 1, j] = true;
+				defer visited[i - 1, j] = false;
+				result = std::max(result, path_helper_non_slippery(map, visited, i - 1, j, distance + 1));
+			}
+			if (map[i + 1, j] != .forest && !visited[i + 1, j])
+			{
+				visited[i + 1, j] = true;
+				defer visited[i + 1, j] = false;
+				result = std::max(result, path_helper_non_slippery(map, visited, i + 1, j, distance + 1));
+			}
+			if (map[i, j - 1] != .forest && !visited[i, j - 1])
+			{
+				visited[i, j - 1] = true;
+				defer visited[i, j - 1] = false;
+				result = std::max(result, path_helper_non_slippery(map, visited, i, j - 1, distance + 1));
+			}
+			if (map[i, j + 1] != .forest && !visited[i, j + 1])
+			{
+				visited[i, j + 1] = true;
+				defer visited[i, j + 1] = false;
+				result = std::max(result, path_helper_non_slippery(map, visited, i, j + 1, distance + 1));
+			}
+			return result;
+		},
+	}
+}
+
+function part2(map: &map_t) -> usize
+{
+	let height = map.size();
+	let width = map[0].size();
+	mut visited = make_visited_map(height, width);
+
+	let i = 0uz;
+	let j = {
+		mut start_j = 0uz;
+		for (let j in 0..width)
+		{
+			if (map[0, j] != .forest)
+			{
+				start_j = j;
+				break;
+			}
+		}
+		start_j
+	};
+	visited[i, j] = true;
+
+	return path_helper_non_slippery(map, visited, i, j, 0);
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+
+	let input = parse_input(input.as_str());
+
+	let part1_result = part1(input);
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input);
+	std::print("part 2: {}\n", part2_result);
+}
