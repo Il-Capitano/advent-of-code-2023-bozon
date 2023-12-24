@@ -1,0 +1,340 @@
+import std::format;
+import std::vector;
+import std::utils;
+import std::math;
+import common;
+
+struct vec3
+{
+	.x: int64;
+	.y: int64;
+	.z: int64;
+}
+
+struct hail_info_t
+{
+	.position: vec3;
+	.velocity: vec3;
+}
+
+function parse_input(input: str) -> std::vector<hail_info_t>
+{
+	mut result = std::vector<hail_info_t>();
+
+	for (let line in input.by_line())
+	{
+		let [position, velocity] = line.split(" @ ");
+		let [px, position] = position.split(", ");
+		let [py, pz] = position.split(", ");
+		let [vx, velocity] = velocity.split(", ");
+		let [vy, vz] = velocity.split(", ");
+
+		result.push_back(hail_info_t[
+			vec3[
+				parse_int(int64, px),
+				parse_int(int64, py),
+				parse_int(int64, pz),
+			],
+			vec3[
+				parse_int(int64, vx),
+				parse_int(int64, vy),
+				parse_int(int64, vz),
+			],
+		]);
+	}
+
+	return move result;
+}
+
+function sgn(n: int64) -> int64
+{
+	return if (n < 0) { -1 } else if (n == 0) { 0 } else { 1 };
+}
+
+function gcd(mut a: int64, mut b: int64) -> int64
+{
+	while (b != 0)
+	{
+		let t = b;
+		b = a % b;
+		a = t;
+	}
+	return a;
+}
+
+function normalize([num: int64, den: int64]) -> [int64, int64]
+{
+	std::assert(den != 0);
+
+	let gcd = gcd(std::abs(num), std::abs(den));
+	if (den < 0)
+	{
+		return [ -num / gcd, -den / gcd ];
+	}
+	else
+	{
+		return [ num / gcd, den / gcd ];
+	}
+}
+
+function to_float(fraction: [int64, int64]) -> float64
+{
+	return fraction[0] as float64 / fraction[1] as float64;
+}
+
+function get_enter_exit_times(p: int64, v: int64) -> [2: [int64, int64]]
+{
+	let min_position = 200'000'000'000'000i64;
+	let max_position = 400'000'000'000'000i64;
+
+	let [enter_pos, exit_pos] = if (v < 0) { [ max_position, min_position ] } else { [ min_position, max_position ] };
+
+	return [
+		normalize([ (enter_pos - p), v ]),
+		normalize([ (exit_pos - p), v ]),
+	];
+}
+
+function less_or_equal(lhs: [int64, int64], rhs: [int64, int64]) -> bool
+{
+	let &[lhs_num, lhs_den] = lhs;
+	let &[rhs_num, rhs_den] = rhs;
+
+	if (lhs_num == rhs_num && lhs_den == rhs_den)
+	{
+		return true;
+	}
+	else if (lhs_num < 0 && rhs_num >= 0)
+	{
+		return true;
+	}
+	else if (rhs_num < 0 && lhs_num >= 0)
+	{
+		return false;
+	}
+
+	let is_negative = lhs_num < 0;
+	let lhs_num = std::abs(lhs_num);
+	let rhs_num = std::abs(rhs_num);
+
+	let den_gcd = gcd(lhs_den, rhs_den);
+	let lhs_mul  = rhs_den / den_gcd;
+	let rhs_mul  = lhs_den / den_gcd;
+
+	if (lhs_num / rhs_mul < rhs_num / lhs_mul)
+	{
+		return !is_negative;
+	}
+	else if (lhs_num / rhs_mul > rhs_num / lhs_mul)
+	{
+		return is_negative;
+	}
+	else
+	{
+		let lhs_rem = lhs_num % rhs_mul;
+		let rhs_rem = rhs_num % lhs_mul;
+		return is_negative ^^ (lhs_rem * lhs_mul < rhs_rem * rhs_mul);
+	}
+}
+
+function part1(hail_infos: [: hail_info_t]) -> int32
+{
+	mut crossing_count = 0;
+	for (let i in 0..hail_infos.size())
+	{
+		for (let j in i + 1..hail_infos.size())
+		{
+			let &p1 = hail_infos[i].position;
+			let &v1 = hail_infos[i].velocity;
+			let &p2 = hail_infos[j].position;
+			let &v2 = hail_infos[j].velocity;
+
+			let t1_num = (p1.y - p2.y) * v2.x - (p1.x - p2.x) * v2.y;
+			let t1_den = v1.x * v2.y - v2.x * v1.y;
+			if (t1_den == 0 || sgn(t1_num) * sgn(t1_den) < 0)
+			{
+				continue;
+			}
+
+			let t2_num = (p2.y - p1.y) * v1.x - (p2.x - p1.x) * v1.y;
+			let t2_den = v2.x * v1.y - v1.x * v2.y;
+			if (t2_den == 0 || sgn(t2_num) * sgn(t2_den) < 0)
+			{
+				continue;
+			}
+
+			let t1 = normalize([ t1_num, t1_den ]);
+			let t2 = normalize([ t2_num, t2_den ]);
+
+			let [x1enter_t, x1exit_t] = get_enter_exit_times(p1.x, v1.x);
+			let [y1enter_t, y1exit_t] = get_enter_exit_times(p1.y, v1.y);
+			let [x2enter_t, x2exit_t] = get_enter_exit_times(p2.x, v2.x);
+			let [y2enter_t, y2exit_t] = get_enter_exit_times(p2.y, v2.y);
+
+			if (
+				less_or_equal(x1enter_t, t1) && less_or_equal(t1, x1exit_t)
+				&& less_or_equal(y1enter_t, t1) && less_or_equal(t1, y1exit_t)
+				&& less_or_equal(x2enter_t, t2) && less_or_equal(t2, x2exit_t)
+				&& less_or_equal(y2enter_t, t2) && less_or_equal(t2, y2exit_t)
+			)
+			{
+				crossing_count += 1;
+			}
+		}
+	}
+
+	return crossing_count;
+}
+
+function contains(a: [: int64], n: int64) -> bool
+{
+	for (let v in a)
+	{
+		if (v == n)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+function intersection(a: [: int64], b: [: int64]) -> std::vector<int64>
+{
+	mut result = std::vector<int64>();
+	for (let v in a)
+	{
+		if (b.contains(v))
+		{
+			result.push_back(v);
+		}
+	}
+	return move result;
+}
+
+function get_possible_velocities(p1: int64, p2: int64, v: int64) -> std::vector<int64>
+{
+	mut possible_v = std::vector<int64>();
+
+	let dp = std::abs(p1 - p2);
+	for (mut n = 1i64; n * n <= dp; ++n)
+	{
+		if (n * n == dp)
+		{
+			possible_v.push_back(n + v);
+			possible_v.push_back(-n + v);
+		}
+		else if (dp % n == 0)
+		{
+			possible_v.push_back(dp / n + v);
+			possible_v.push_back(-dp / n + v);
+			possible_v.push_back(n + v);
+			possible_v.push_back(-n + v);
+		}
+	}
+
+	return move possible_v;
+}
+
+function part2(hail_infos: [: hail_info_t]) -> int64
+{
+	mut possible_vx = std::vector<int64>();
+	mut possible_vy = std::vector<int64>();
+	mut possible_vz = std::vector<int64>();
+
+	mut x_pair: ?[usize, usize] = null;
+
+	for (let i in 0..hail_infos.size())
+	{
+		if (possible_vx.size() == 1 && possible_vy.size() == 1 && possible_vz.size() == 1)
+		{
+			break;
+		}
+
+		for (let j in i + 1..hail_infos.size())
+		{
+			let &p1 = hail_infos[i].position;
+			let &v1 = hail_infos[i].velocity;
+			let &p2 = hail_infos[j].position;
+			let &v2 = hail_infos[j].velocity;
+
+			if (possible_vx.size() != 1 && v1.x == v2.x)
+			{
+				if (x_pair == null)
+				{
+					x_pair = [ i, j ];
+				}
+
+				let inner_possible_vx = get_possible_velocities(p1.x, p2.x, v1.x);
+				if (possible_vx.size() == 0)
+				{
+					possible_vx = move inner_possible_vx;
+				}
+				else
+				{
+					possible_vx = intersection(possible_vx.as_slice(), inner_possible_vx.as_slice());
+				}
+			}
+			if (possible_vy.size() != 1 && v1.y == v2.y)
+			{
+				let inner_possible_vy = get_possible_velocities(p1.y, p2.y, v1.y);
+				if (possible_vy.size() == 0)
+				{
+					possible_vy = move inner_possible_vy;
+				}
+				else
+				{
+					possible_vy = intersection(possible_vy.as_slice(), inner_possible_vy.as_slice());
+				}
+			}
+			if (possible_vz.size() != 1 && v1.z == v2.z)
+			{
+				let inner_possible_vz = get_possible_velocities(p1.z, p2.z, v1.z);
+				if (possible_vz.size() == 0)
+				{
+					possible_vz = move inner_possible_vz;
+				}
+				else
+				{
+					possible_vz = intersection(possible_vz.as_slice(), inner_possible_vz.as_slice());
+				}
+			}
+		}
+	}
+
+	std::assert(possible_vx.size() == 1);
+	std::assert(possible_vy.size() == 1);
+	std::assert(possible_vz.size() == 1);
+	let v = vec3[ possible_vx[0], possible_vy[0], possible_vz[0] ];
+	let &x_pair = x_pair.get_value();
+
+	let p = {
+		let &p1 = hail_infos[x_pair[0]].position;
+		let &p2 = hail_infos[x_pair[1]].position;
+		let &v1 = hail_infos[x_pair[0]].velocity;
+		let &v2 = hail_infos[x_pair[1]].velocity;
+		std::assert((p1.x - p2.x) % (v.x - v1.x) == 0);
+		let dt = (p1.x - p2.x) / (v.x - v1.x);
+		let num = p2.y - p1.y - dt * (v2.y - v.y);
+		let den = v1.y - v2.y;
+		let t1 = num / den;
+
+		vec3[
+			p1.x + (v1.x - v.x) * t1,
+			p1.y + (v1.y - v.y) * t1,
+			p1.z + (v1.z - v.z) * t1,
+		]
+	};
+
+	return p.x + p.y + p.z;
+}
+
+function main()
+{
+	let input = read_file("input.txt");
+	let input = parse_input(input.as_str());
+
+	let part1_result = part1(input.as_slice());
+	std::print("part 1: {}\n", part1_result);
+	let part2_result = part2(input.as_slice());
+	std::print("part 2: {}\n", part2_result);
+}
